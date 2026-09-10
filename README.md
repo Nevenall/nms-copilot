@@ -340,8 +340,8 @@ at your option.
 
 [//]: ---Named-Links---
 
-[logo]: assets/images/logo/v1-x250.png
-[logo-large]: assets/images/logo/v1.png
+[logo]: assets/images/logo/v2-x250.jpg
+[logo-large]: assets/images/logo/v2.jpg
 [build]: https://github.com/oxur/nms-copilot/actions/workflows/ci.yml
 [build-badge]: https://github.com/oxur/nms-copilot/actions/workflows/ci.yml/badge.svg
 [crate]: https://crates.io/crates/nms-copilot
