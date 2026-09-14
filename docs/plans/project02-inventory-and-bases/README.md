@@ -10,6 +10,7 @@ Two arcs, each with its own plan document:
 |-----|-----|---------------------|
 | arc01-inventory | [0044](arc01-inventory/0044-inventory-model-and-queries.md) | Do I have this item, how much, and where is it? |
 | arc02-farm-and-industry | [0045](arc02-farm-and-industry/0045-crops-and-supply-depots.md) | Are my crops ready, how full are my supply depots, and what powers the base? |
+| arc03-fleet | [0046](arc03-fleet/0046-fleet-expeditions.md) | What are my frigates doing, is one waiting for me, and when can I send more? |
 
 Both arcs were scoped against a real save on 2026-09-12 and 2026-09-13. Every field and constant quoted in the plans was read from that save unless marked as inferred or unverified.
 
@@ -23,4 +24,4 @@ Both arcs need pieces that do not exist yet. Build them once, in this order:
 
 ## Status
 
-Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool; its plan records the verified decode rules. Arc 01 is a first draft, not started.
+Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool; its plan records the verified decode rules. Arc 01 and arc 03 are first drafts, not started.
