@@ -12,7 +12,7 @@ Two arcs, each with its own plan document:
 | arc02-farm-and-industry | [0045](arc02-farm-and-industry/0045-crops-and-supply-depots.md) | Are my crops ready, how full are my supply depots, and what powers the base? |
 | arc03-fleet | [0046](arc03-fleet/0046-fleet-expeditions.md) | What are my frigates doing, is one waiting for me, and when can I send more? |
 
-Both arcs were scoped against a real save on 2026-09-12 and 2026-09-13. Every field and constant quoted in the plans was read from that save unless marked as inferred or unverified.
+The arcs were scoped against a real save on 2026-09-12 to 2026-09-14. Every field and constant quoted in the plans was read from that save unless marked as inferred or unverified; the maintained record of those facts, with the evidence behind each, is [docs/reference](../../reference/README.md).
 
 ## Shared groundwork
 

@@ -18,6 +18,8 @@ Before this arc the tool read a base's name, type, and address and discarded its
 
 ## What the save contains (verified)
 
+> The decode facts below are maintained in [docs/reference/nms-save-notes.md](../../../reference/nms-save-notes.md) and the IDs and constants in [nms-game-notes.md](../../../reference/nms-game-notes.md), each with its evidence; this section is the snapshot the plan was written from.
+
 ### Base objects
 
 Under `PlayerStateData.PersistentPlayerBases[i]`:

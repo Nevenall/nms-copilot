@@ -1,7 +1,8 @@
 # Workbench and local tools
 /workbench
 /.worktrees
-/.claude
+/.claude/*
+!/.claude/agents/
 /bin
 /assets/ai/ai-rust
 /assets/images/logo/drafts

@@ -18,6 +18,8 @@ The tool reads none of it today.
 
 ## What the save contains (verified)
 
+> The decode facts below are maintained in [docs/reference/nms-save-notes.md](../../../reference/nms-save-notes.md) with their evidence; this section is the snapshot the plan was written from.
+
 ### Running expeditions: `PlayerStateData.FleetExpeditions[]`
 
 | Field | Meaning | Sample |

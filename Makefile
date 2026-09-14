@@ -193,6 +193,12 @@ lint:
 	@cargo fmt --all -- --check
 	@echo "$(GREEN)✓ Format check passed$(RESET)"
 
+.PHONY: lint-docs
+lint-docs:
+	@echo "$(BLUE)Checking reference docs...$(RESET)"
+	@python3 scripts/check-reference-tags.py
+	@echo "$(GREEN)✓ Reference docs passed$(RESET)"
+
 .PHONY: format
 format:
 	@echo "$(BLUE)Formatting code...$(RESET)"

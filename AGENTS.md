@@ -56,6 +56,7 @@ Once the workspace exists:
 make build          # Build all crates
 make test           # Run all tests
 make lint           # Clippy linting
+make lint-docs      # Evidence tags and links in docs/reference
 make format         # rustfmt formatting
 make coverage       # Code coverage (target: 95%+)
 cargo test -p nms-core          # Test a single crate
@@ -81,7 +82,16 @@ No encryption on modern saves (format 2002+, post-Frontiers). XXTEA only on meta
 
 ### Galactic Address
 
-`GalacticAddress` — 48-bit packed coordinate: VoxelX/Y/Z (signed), SolarSystemIndex, PlanetIndex, RealityIndex (galaxy 0-255). Distance = Euclidean voxel distance × 400 ly.
+`GalacticAddress` — 48-bit packed coordinate: VoxelX/Y/Z (signed), SolarSystemIndex, PlanetIndex, RealityIndex (galaxy 0-255). Distance = Euclidean voxel distance × 400 ly. The save file stores addresses in a different bit layout; both are in `docs/reference/nms-save-notes.md`.
+
+## Game and Save Facts
+
+Facts about the save file's encodings and the game's mechanics, IDs, and constants live in `docs/reference/` (`nms-save-notes.md`, `nms-game-notes.md`), each line tagged with how it is known: `verified`, `game-data`, `community`, `inferred`, or `open`. `docs/reference/README.md` defines the tags and the method that earns each one. A save reading plus an independent observation outranks any document, including those.
+
+- Before writing code that depends on a decode rule, an object or item ID, or a constant, read the relevant line and check its tag. Do not build on an `inferred` line as if it were `verified`; either verify it first or make the code's caveat match the tag.
+- Any session that establishes a new fact, changes one, or moves one up the ladder records it in `docs/reference` before the work is called done. Plan documents under `docs/plans` and code comments cite the reference notes rather than restating facts.
+- `nms raw <path>` dumps any part of the decoded save for this work; `make lint-docs` checks that every fact line in the notes carries a tag and every link resolves.
+- The `nms-expert` agent in `.claude/agents/` carries this method; use it for save-decoding and game-mechanics questions.
 
 ## Conventions
 

@@ -16,6 +16,8 @@ The motivating question was "do I have gold and silver, and where?" The answer f
 
 ## What the save contains (verified)
 
+> The decode facts below are maintained in [docs/reference/nms-save-notes.md](../../../reference/nms-save-notes.md) with their evidence; this section is the snapshot the plan was written from.
+
 All paths are under `BaseContext.PlayerStateData` (or the expedition context; the active one applies).
 
 ### Grids
