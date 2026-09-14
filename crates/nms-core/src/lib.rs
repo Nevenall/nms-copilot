@@ -1,6 +1,7 @@
 //! Core types, enums, address math, and portal glyph display for NMS Copilot.
 
 pub mod address;
+pub mod base;
 pub mod biome;
 pub mod delta;
 pub mod discovery;
@@ -10,6 +11,10 @@ pub mod player;
 pub mod system;
 
 pub use address::{AddressParseError, GalacticAddress, PortalAddress, PortalParseError};
+pub use base::{
+    BaseObjects, Battery, Crop, CropKind, Depot, Extractor, ExtractorKind, Generator,
+    GeneratorKind, Network, RawBaseObject,
+};
 pub use biome::{Biome, BiomeParseError, BiomeSubType};
 pub use delta::{PlayerMoved, SaveDelta};
 pub use discovery::{Discovery, DiscoveryParseError, DiscoveryRecord};

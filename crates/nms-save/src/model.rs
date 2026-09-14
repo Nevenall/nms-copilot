@@ -419,9 +419,9 @@ pub struct PersistentPlayerBase {
     #[serde(default)]
     pub last_update_timestamp: u64,
 
-    /// Base objects — stored as opaque JSON.
+    /// Placed objects: parts, crops, depots, extractors, power equipment.
     #[serde(default)]
-    pub objects: Vec<serde_json::Value>,
+    pub objects: Vec<BaseObject>,
 
     #[serde(default, rename = "RID")]
     pub rid: String,
@@ -443,6 +443,37 @@ pub struct PersistentPlayerBase {
 
     #[serde(default)]
     pub game_mode: Option<GameModeWrapper>,
+}
+
+/// One placed object at a base.
+///
+/// Only the fields the model uses are kept. `Position` is base-relative; `Timestamp` is Unix seconds and is rewritten to the save time on every save; `UserData` carries per-object state (see `nms_core::base`).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct BaseObject {
+    #[serde(rename = "ObjectID", default)]
+    pub object_id: String,
+
+    #[serde(default)]
+    pub position: [f32; 3],
+
+    #[serde(default)]
+    pub timestamp: u64,
+
+    #[serde(default)]
+    pub user_data: u64,
+}
+
+impl BaseObject {
+    /// View for the core decoder.
+    pub fn as_raw(&self) -> nms_core::RawBaseObject<'_> {
+        nms_core::RawBaseObject {
+            object_id: &self.object_id,
+            timestamp: i64::try_from(self.timestamp).unwrap_or(i64::MAX),
+            user_data: self.user_data,
+        }
+    }
 }
 
 /// Wrapper for `{"PersistentBaseTypes": "HomePlanetBase"}`.
@@ -802,5 +833,35 @@ mod tests {
     fn player_state_without_teleport_endpoints() {
         let ps: PlayerStateData = serde_json::from_str(r#"{"Units": 5}"#).unwrap();
         assert!(ps.teleport_endpoints.is_empty());
+    }
+
+    #[test]
+    fn parse_base_objects_keeps_id_timestamp_and_user_data() {
+        let json = r#"{
+            "GalacticAddress": "0x00100000000064",
+            "Objects": [
+                {"ObjectID": "^SNOWPLANT", "Position": [5.68, 3.86, -4.03], "Up": [0, 1, 0], "At": [0, 0, 1], "Timestamp": 1789279852, "UserData": 15461882265600},
+                {"ObjectID": "^U_SILO_S", "Timestamp": 1789279852, "UserData": 6184752906240000}
+            ],
+            "Name": "Farm",
+            "BaseType": {"PersistentBaseTypes": "HomePlanetBase"}
+        }"#;
+        let base: PersistentPlayerBase = serde_json::from_str(json).unwrap();
+        assert_eq!(base.objects.len(), 2);
+        assert_eq!(base.objects[0].object_id, "^SNOWPLANT");
+        assert_eq!(base.objects[0].position, [5.68, 3.86, -4.03]);
+        assert_eq!(base.objects[0].timestamp, 1789279852);
+        assert_eq!(base.objects[0].user_data, 15461882265600);
+        let raw = base.objects[1].as_raw();
+        assert_eq!(raw.object_id, "^U_SILO_S");
+        assert_eq!(raw.timestamp, 1789279852);
+        assert_eq!(raw.user_data >> 32, 1_440_000);
+    }
+
+    #[test]
+    fn parse_base_without_objects_field() {
+        let json = r#"{"GalacticAddress": "0x00100000000064", "Name": "Bare"}"#;
+        let base: PersistentPlayerBase = serde_json::from_str(json).unwrap();
+        assert!(base.objects.is_empty());
     }
 }

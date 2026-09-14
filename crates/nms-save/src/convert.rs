@@ -63,6 +63,9 @@ impl PersistentPlayerBase {
                 Some(self.owner.uid.clone())
             },
         )
+        .with_objects(nms_core::BaseObjects::decode(
+            self.objects.iter().map(BaseObject::as_raw),
+        ))
     }
 }
 
@@ -316,5 +319,30 @@ mod tests {
         let save: SaveRoot = serde_json::from_str(json).unwrap();
         let state = save.to_core_player_state();
         assert!(state.previous_address.is_none());
+    }
+
+    #[test]
+    fn to_core_base_decodes_objects() {
+        let json = r#"{
+            "GalacticAddress": "0x00100000000064",
+            "Objects": [
+                {"ObjectID": "^SNOWPLANT", "Timestamp": 1789279852, "UserData": 15461882265600},
+                {"ObjectID": "^U_SILO_S", "Timestamp": 1789279852, "UserData": 6184752906240000},
+                {"ObjectID": "^U_BATTERY_S", "Timestamp": 1789279852, "UserData": 193273528320000},
+                {"ObjectID": "^BUILDLANDINGPAD", "Timestamp": 1789279852, "UserData": 0}
+            ],
+            "Name": "Farm",
+            "BaseType": {"PersistentBaseTypes": "HomePlanetBase"}
+        }"#;
+        let base: PersistentPlayerBase = serde_json::from_str(json).unwrap();
+        let core = base.to_core_base();
+        assert_eq!(core.objects.crops.len(), 1);
+        assert_eq!(
+            core.objects.crops[0].kind,
+            Some(nms_core::CropKind::FrostCrystal)
+        );
+        assert_eq!(core.objects.depots[0].units, 1000);
+        assert!(core.objects.batteries[0].is_full());
+        assert_eq!(core.objects.other, 1);
     }
 }

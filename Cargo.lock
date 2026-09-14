@@ -2204,13 +2204,16 @@ dependencies = [
 name = "nms-query"
 version = "0.3.0"
 dependencies = [
+ "chrono",
  "nms-core",
  "nms-graph",
  "nms-save",
  "oxur-cli",
  "serde_json",
  "tabled 0.17.0",
+ "terminal_size",
  "toml 1.0.6+spec-1.1.0",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

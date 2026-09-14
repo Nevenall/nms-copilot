@@ -23,7 +23,7 @@ use nms_copilot::completer::{CopilotCompleter, ModelCompletions};
 use nms_copilot::config::Config;
 use nms_copilot::mcp;
 use nms_copilot::prompt::{CopilotPrompt, PromptState};
-use nms_copilot::session::SessionState;
+use nms_copilot::session::{SessionState, unix_now};
 use nms_copilot::watch::drain_watch_events;
 use nms_copilot::{commands, dispatch, paths};
 use nms_graph::GalaxyModel;
@@ -214,6 +214,9 @@ fn main() {
     if let Some(warp_range) = config.defaults.warp_range {
         session.set_warp_range(warp_range);
     }
+    // Seed the alert state and print one summary line instead of a notice per alert.
+    session.refresh_alerts(&model.blocking_read(), unix_now());
+    println!("{}\n", session.alert_line());
     let mut prompt = CopilotPrompt::new(PromptState::from_session(&session));
 
     loop {
@@ -227,6 +230,11 @@ fn main() {
                 cache_for_watcher,
                 save_version,
             );
+        }
+
+        // Re-check base alerts against the clock and the (possibly refreshed) model.
+        for note in session.refresh_alerts(&model.blocking_read(), unix_now()) {
+            println!("  {note}");
         }
 
         prompt.update(PromptState::from_session(&session));

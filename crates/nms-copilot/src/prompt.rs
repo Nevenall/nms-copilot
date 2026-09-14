@@ -1,7 +1,7 @@
 //! Context-aware REPL prompt.
 //!
-//! Displays current galaxy, active biome filter, and model size.
-//! Format: `[Euclid | Lush | 644 planets] 🚀 `
+//! Displays current galaxy, active biome filter, and model size on the left, and pending base alerts (crops ready, depots full) on the right.
+//! Format: `[Euclid | Lush | 644 planets] 🚀 ` ... `🌱 16 ready · 📦 1 full`
 
 use std::borrow::Cow;
 
@@ -19,6 +19,8 @@ pub struct PromptState {
     pub galaxy_name: String,
     pub biome_filter: Option<String>,
     pub planet_count: usize,
+    /// Right-hand alert indicator, empty when nothing is pending.
+    pub alerts: String,
 }
 
 impl PromptState {
@@ -28,6 +30,7 @@ impl PromptState {
             galaxy_name: session.galaxy.name.to_string(),
             biome_filter: session.biome_filter.map(|b| format!("{b:?}")),
             planet_count: session.planet_count,
+            alerts: session.alert_indicator(),
         }
     }
 }
@@ -66,7 +69,7 @@ impl Prompt for CopilotPrompt {
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {
-        Cow::Borrowed("")
+        Cow::Borrowed(&self.state.alerts)
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
@@ -99,6 +102,7 @@ mod tests {
             galaxy_name: "Euclid".into(),
             biome_filter: None,
             planet_count: 644,
+            alerts: String::new(),
         };
         let prompt = CopilotPrompt::new(state);
         let left = prompt.render_prompt_left();
@@ -111,6 +115,7 @@ mod tests {
             galaxy_name: "Euclid".into(),
             biome_filter: Some("Lush".into()),
             planet_count: 42,
+            alerts: String::new(),
         };
         let prompt = CopilotPrompt::new(state);
         let left = prompt.render_prompt_left();
@@ -123,6 +128,7 @@ mod tests {
             galaxy_name: "Hilbert Dimension".into(),
             biome_filter: None,
             planet_count: 100,
+            alerts: String::new(),
         };
         let prompt = CopilotPrompt::new(state);
         let left = prompt.render_prompt_left();
@@ -135,6 +141,7 @@ mod tests {
             galaxy_name: "Euclid".into(),
             biome_filter: None,
             planet_count: 0,
+            alerts: String::new(),
         };
         let prompt = CopilotPrompt::new(state);
         assert_eq!(
@@ -151,6 +158,7 @@ mod tests {
             galaxy_name: "Euclid".into(),
             biome_filter: None,
             planet_count: 100,
+            alerts: String::new(),
         };
         let mut prompt = CopilotPrompt::new(state1);
         assert!(prompt.render_prompt_left().contains("100 planets"));
@@ -159,6 +167,7 @@ mod tests {
             galaxy_name: "Euclid".into(),
             biome_filter: Some("Toxic".into()),
             planet_count: 200,
+            alerts: String::new(),
         };
         prompt.update(state2);
         let left = prompt.render_prompt_left();
@@ -190,5 +199,17 @@ mod tests {
         let ps = PromptState::from_session(&session);
         assert_eq!(ps.galaxy_name, "Euclid");
         assert!(ps.biome_filter.is_none());
+    }
+
+    #[test]
+    fn test_prompt_right_shows_alert_indicator() {
+        let state = PromptState {
+            galaxy_name: "Euclid".into(),
+            biome_filter: None,
+            planet_count: 1,
+            alerts: "\u{1F331} 16 ready".into(),
+        };
+        let prompt = CopilotPrompt::new(state);
+        assert_eq!(prompt.render_prompt_right(), "\u{1F331} 16 ready");
     }
 }

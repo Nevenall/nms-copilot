@@ -4,10 +4,23 @@
 //! Commands like `find` and `route` use this state as defaults when
 //! explicit flags are not provided.
 
+use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
 use nms_core::galaxy::Galaxy;
 use nms_graph::GalaxyModel;
+use nms_query::base::{Alert, AlertSummary, current_alerts};
+use nms_query::display::{format_alert_indicator, format_alert_line};
+
+/// Current Unix time in seconds.
+pub fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
 
 /// Mutable session state maintained across REPL commands.
 #[derive(Debug)]
@@ -29,6 +42,12 @@ pub struct SessionState {
 
     /// Number of planets in the model.
     pub planet_count: usize,
+
+    /// Base alerts (crops ready, depots full) as of the last refresh.
+    pub alerts: Vec<Alert>,
+
+    /// Alert keys already announced, so a notice prints once per event.
+    announced_alerts: HashSet<String>,
 }
 
 /// Where the user's reference position is anchored.
@@ -83,7 +102,35 @@ impl SessionState {
             galaxy,
             system_count: model.systems.len(),
             planet_count: model.planets.len(),
+            alerts: Vec::new(),
+            announced_alerts: HashSet::new(),
         }
+    }
+
+    /// Recompute base alerts at `now` and return notices for alerts not announced before.
+    ///
+    /// An alert that disappears (crops harvested, depots emptied) is forgotten, so it is announced again when it next occurs.
+    pub fn refresh_alerts(&mut self, model: &GalaxyModel, now: i64) -> Vec<String> {
+        self.alerts = current_alerts(model, now);
+        let current: HashSet<String> = self.alerts.iter().map(Alert::key).collect();
+        self.announced_alerts.retain(|key| current.contains(key));
+        let mut notices = Vec::new();
+        for alert in &self.alerts {
+            if self.announced_alerts.insert(alert.key()) {
+                notices.push(alert.text());
+            }
+        }
+        notices
+    }
+
+    /// Compact indicator for the prompt, empty when nothing is pending.
+    pub fn alert_indicator(&self) -> String {
+        format_alert_indicator(&AlertSummary::from_alerts(&self.alerts))
+    }
+
+    /// One-line summary of current alerts.
+    pub fn alert_line(&self) -> String {
+        format_alert_line(&self.alerts)
     }
 
     /// Set the reference position to a named base.
@@ -175,6 +222,15 @@ impl SessionState {
         match self.warp_range {
             Some(r) => lines.push(format!("Warp range:  {} ly", r as u64)),
             None => lines.push("Warp range:  (none)".into()),
+        }
+
+        if self.alerts.is_empty() {
+            lines.push("Alerts:      (none)".into());
+        } else {
+            lines.push("Alerts:".into());
+            for alert in &self.alerts {
+                lines.push(format!("  {}", alert.text()));
+            }
         }
 
         lines.join("\n") + "\n"
@@ -319,5 +375,71 @@ mod tests {
             &session.position,
             Some(PositionContext::PlayerPosition(_))
         ));
+    }
+
+    #[test]
+    fn test_refresh_alerts_announces_once_and_rearms() {
+        use nms_core::player::{BaseType, PlayerBase};
+        use nms_core::{BaseObjects, RawBaseObject};
+
+        let snapshot = 1_789_402_087;
+        let mut model = test_model();
+        let farm = PlayerBase::new(
+            "Farm".into(),
+            BaseType::HomePlanetBase,
+            GalacticAddress::new(0, 0, 0, 1, 0, 0),
+            [0.0; 3],
+            None,
+        )
+        .with_objects(BaseObjects::decode([RawBaseObject {
+            object_id: "^SNOWPLANT",
+            timestamp: snapshot,
+            user_data: 3000 << 32,
+        }]));
+        model.insert_base(farm);
+        let mut session = SessionState::from_model(&model);
+
+        assert!(session.refresh_alerts(&model, snapshot).is_empty());
+        assert_eq!(session.alert_indicator(), "");
+        assert!(session.format_status().contains("Alerts:      (none)"));
+
+        let notices = session.refresh_alerts(&model, snapshot + 600);
+        assert_eq!(notices, vec!["Farm: 1 Frost Crystal ready".to_string()]);
+        assert!(
+            session.refresh_alerts(&model, snapshot + 700).is_empty(),
+            "announced once"
+        );
+        assert_eq!(session.alert_indicator(), "\u{1F331} 1 ready");
+        assert!(
+            session
+                .format_status()
+                .contains("Farm: 1 Frost Crystal ready")
+        );
+        assert_eq!(
+            session.alert_line(),
+            "Ready: 1 Frost Crystal at Farm. Full depots: none."
+        );
+
+        // Harvested: the plant restarts, so the alert clears and re-arms.
+        let farm = PlayerBase::new(
+            "Farm".into(),
+            BaseType::HomePlanetBase,
+            GalacticAddress::new(0, 0, 0, 1, 0, 0),
+            [0.0; 3],
+            None,
+        )
+        .with_objects(BaseObjects::decode([RawBaseObject {
+            object_id: "^SNOWPLANT",
+            timestamp: snapshot + 700,
+            user_data: 0,
+        }]));
+        model.insert_base(farm);
+        assert!(session.refresh_alerts(&model, snapshot + 800).is_empty());
+        assert_eq!(session.alert_indicator(), "");
+        assert_eq!(
+            session.refresh_alerts(&model, snapshot + 700 + 3600).len(),
+            1,
+            "re-armed"
+        );
     }
 }

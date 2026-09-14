@@ -3,6 +3,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::address::GalacticAddress;
+use crate::base::BaseObjects;
 
 /// Maps to PersistentBaseTypes in the save file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -69,6 +70,9 @@ pub struct PlayerBase {
     pub position: [f32; 3],
     /// Platform-specific user ID.
     pub owner_uid: Option<String>,
+    /// Decoded placed objects: crops, depots, extractors, power equipment.
+    #[serde(default)]
+    pub objects: BaseObjects,
 }
 
 impl PlayerBase {
@@ -85,7 +89,14 @@ impl PlayerBase {
             address,
             position,
             owner_uid,
+            objects: BaseObjects::default(),
         }
+    }
+
+    /// Attach decoded base objects.
+    pub fn with_objects(mut self, objects: BaseObjects) -> Self {
+        self.objects = objects;
+        self
     }
 
     /// Galaxy index (convenience accessor for `address.reality_index`).

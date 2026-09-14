@@ -43,16 +43,48 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
     }
 }
 
-/// Serialize cache data to bytes.
+/// Magic bytes at the start of a cache file.
+const CACHE_MAGIC: &[u8; 4] = b"NMSC";
+
+/// Version of the archived data. Bump whenever an archived type changes shape, or whenever a decoding rule that feeds archived data changes (base objects are stored decoded), so caches written by an older binary are rebuilt instead of trusted.
+pub const CACHE_FORMAT_VERSION: u32 = 3;
+
+const HEADER_LEN: usize = CACHE_MAGIC.len() + 4;
+
+/// Serialize cache data to bytes, prefixed with the format header.
 pub fn serialize(data: &CacheData) -> Result<Vec<u8>, CacheError> {
-    rkyv::to_bytes::<RkyvError>(data)
-        .map(|v| v.to_vec())
-        .map_err(|e| CacheError::Serialize(e.to_string()))
+    let archived =
+        rkyv::to_bytes::<RkyvError>(data).map_err(|e| CacheError::Serialize(e.to_string()))?;
+    let mut bytes = Vec::with_capacity(HEADER_LEN + archived.len());
+    bytes.extend_from_slice(CACHE_MAGIC);
+    bytes.extend_from_slice(&CACHE_FORMAT_VERSION.to_le_bytes());
+    bytes.extend_from_slice(&archived);
+    Ok(bytes)
 }
 
-/// Deserialize cache data from bytes.
+/// Deserialize cache data from bytes, rejecting files without the current format header.
 pub fn deserialize(bytes: &[u8]) -> Result<CacheData, CacheError> {
-    rkyv::from_bytes::<CacheData, RkyvError>(bytes)
+    let (magic, rest) = bytes
+        .split_at_checked(CACHE_MAGIC.len())
+        .ok_or_else(|| CacheError::Deserialize("cache file too short".into()))?;
+    if magic != CACHE_MAGIC {
+        return Err(CacheError::Deserialize(
+            "not a cache file (missing header)".into(),
+        ));
+    }
+    let (version, payload) = rest
+        .split_at_checked(4)
+        .ok_or_else(|| CacheError::Deserialize("cache file too short".into()))?;
+    let version = u32::from_le_bytes(version.try_into().expect("four bytes"));
+    if version != CACHE_FORMAT_VERSION {
+        return Err(CacheError::Deserialize(format!(
+            "cache format version {version}, expected {CACHE_FORMAT_VERSION}"
+        )));
+    }
+    // rkyv needs the archive aligned; copy the payload into an aligned buffer.
+    let mut aligned = rkyv::util::AlignedVec::<16>::with_capacity(payload.len());
+    aligned.extend_from_slice(payload);
+    rkyv::from_bytes::<CacheData, RkyvError>(&aligned)
         .map_err(|e| CacheError::Deserialize(e.to_string()))
 }
 
@@ -211,5 +243,49 @@ mod tests {
         let data = extract_cache_data(&model, 4720);
         let rebuilt = rebuild_model(&data);
         assert!(rebuilt.base("Test Base").is_some());
+    }
+
+    #[test]
+    fn deserialize_rejects_missing_header() {
+        let data = extract_cache_data(&test_model(), 4720);
+        let bytes = rkyv::to_bytes::<RkyvError>(&data).unwrap();
+        let err = deserialize(&bytes).unwrap_err();
+        assert!(err.to_string().contains("header"), "{err}");
+    }
+
+    #[test]
+    fn deserialize_rejects_other_format_version() {
+        let data = extract_cache_data(&test_model(), 4720);
+        let mut bytes = serialize(&data).unwrap();
+        bytes[4..8].copy_from_slice(&(CACHE_FORMAT_VERSION + 1).to_le_bytes());
+        let err = deserialize(&bytes).unwrap_err();
+        assert!(err.to_string().contains("version"), "{err}");
+    }
+
+    #[test]
+    fn cache_round_trips_base_objects() {
+        use nms_core::{BaseObjects, RawBaseObject};
+        let mut model = test_model();
+        let mut base = model.bases.values().next().unwrap().clone();
+        base.objects = BaseObjects::decode([
+            RawBaseObject {
+                object_id: "^SNOWPLANT",
+                timestamp: 1789279852,
+                user_data: 15461882265600,
+            },
+            RawBaseObject {
+                object_id: "^U_SILO_S",
+                timestamp: 1789279852,
+                user_data: 6184752906240000,
+            },
+        ]);
+        model.insert_base(base.clone());
+        let data = extract_cache_data(&model, 4720);
+        let restored = deserialize(&serialize(&data).unwrap()).unwrap();
+        let rebuilt = rebuild_model(&restored);
+        assert_eq!(
+            rebuilt.bases[&base.name.to_lowercase()].objects,
+            base.objects
+        );
     }
 }

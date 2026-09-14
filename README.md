@@ -139,6 +139,9 @@ nms route --round-trip                           # return to start
 nms info                              # save overview, player location, discovery counts
 nms show system 369                   # system details + all planets
 nms show base "Acadia National Park"  # base details with portal glyphs
+nms base                              # every base: crops ready, extraction fill, power
+nms base "Farm"                       # one base: crops by type, extraction by pipe network, power
+nms base "Farm" --width 160           # lay the sections out side by side at this width (default: terminal width)
 nms stats --biomes                    # biome distribution table
 nms stats --discoveries               # discovery counts by type
 nms saves                             # list all save slots
@@ -194,7 +197,7 @@ nms find --slot 5 --biome Lush      # search slot 5's discoveries
 
 ### Interactive REPL
 
-The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map:
+The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map. It also watches your bases: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full` while crops are ready to harvest or an extraction network is full, and a notice prints once when either happens.
 
 ```bash
 nms-copilot
@@ -226,7 +229,7 @@ REPL-only commands:
 | `set biome <biome>` | Set default biome filter for find/route |
 | `set warp-range <ly>` | Set default warp range for route planning |
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
-| `status` | Show current session state |
+| `status` | Show current session state and base alerts |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
 
 ---
@@ -280,7 +283,7 @@ nms-copilot --headless                           # stdio transport
 nms-copilot --headless --http 127.0.0.1:3000    # HTTP transport
 ```
 
-The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, and track your position as you play.
+The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, and check which crops are ready and how full your supply depots are (`base_status`).
 
 ---
 

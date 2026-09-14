@@ -59,6 +59,16 @@ pub enum Action {
         target: ShowTarget,
     },
 
+    /// Show crops, extraction networks, and power at your bases.
+    Base {
+        /// Base name for the full view (exact, then substring match). Omit for a one-row-per-base overview.
+        name: Option<String>,
+
+        /// Layout width in columns for the full view (default: terminal width).
+        #[arg(long)]
+        width: Option<usize>,
+    },
+
     /// Display aggregate galaxy statistics.
     Stats {
         /// Show biome distribution table.
@@ -634,5 +644,27 @@ mod tests {
     fn test_parse_command_dash_help_shows_subcommand_help() {
         let result = parse_line("find --help");
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_base_with_and_without_name() {
+        let action = parse_line("base").unwrap().unwrap();
+        assert!(matches!(
+            action,
+            Action::Base {
+                name: None,
+                width: None
+            }
+        ));
+        let action = parse_line("base \"Gold and Silver\" --width 160")
+            .unwrap()
+            .unwrap();
+        match action {
+            Action::Base { name, width } => {
+                assert_eq!(name.as_deref(), Some("Gold and Silver"));
+                assert_eq!(width, Some(160));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

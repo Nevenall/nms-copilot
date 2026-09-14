@@ -16,6 +16,7 @@ use nms_core::galaxy::Galaxy;
 use nms_graph::BiomeFilter;
 use nms_graph::GalaxyModel;
 use nms_graph::RoutingAlgorithm;
+use nms_query::base::{BaseQuery, alerts_from, execute_base};
 use nms_query::display::{format_distance, hex_to_emoji};
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
@@ -46,6 +47,7 @@ impl ToolRegistry for NmsTools {
             whats_nearby_tool(),
             show_system_tool(),
             show_base_tool(),
+            base_status_tool(),
             convert_coordinates_tool(),
             galaxy_stats_tool(),
         ]
@@ -60,6 +62,7 @@ impl ToolRegistry for NmsTools {
             "whats_nearby" => Some(Box::pin(handle_whats_nearby(model, args))),
             "show_system" => Some(Box::pin(handle_show_system(model, args))),
             "show_base" => Some(Box::pin(handle_show_base(model, args))),
+            "base_status" => Some(Box::pin(handle_base_status(model, args))),
             "convert_coordinates" => Some(Box::pin(handle_convert(model, args))),
             "galaxy_stats" => Some(Box::pin(handle_galaxy_stats(model, args))),
             _ => None,
@@ -220,6 +223,22 @@ fn show_base_tool() -> Tool {
                 }
             },
             "required": ["name"]
+        })),
+    )
+}
+
+fn base_status_tool() -> Tool {
+    Tool::new(
+        "base_status",
+        "Crops ready to harvest, supply depot fill by pipe network, and power equipment at the player's bases. Depot contents are as of the last save; crop timing is computed from the current clock.",
+        schema(json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Base name (exact, then substring match). Omit for every base."
+                }
+            }
         })),
     )
 }
@@ -643,6 +662,84 @@ async fn handle_show_base(
     }
 }
 
+/// Current Unix time in seconds.
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Build JSON for base statuses.
+pub(crate) fn build_base_status_json(
+    model: &GalaxyModel,
+    name: Option<&str>,
+    now: i64,
+) -> Result<Value, nms_graph::GraphError> {
+    let statuses = execute_base(
+        model,
+        &BaseQuery {
+            name: name.map(str::to_string),
+        },
+        now,
+    )?;
+    let bases: Vec<Value> = statuses.iter().map(|s| {
+        let crops: Vec<Value> = s.crops.iter().map(|row| json!({
+            "crop": row.label,
+            "count": row.count,
+            "ready": row.ready,
+            "next_ready_secs": row.next_ready_secs(),
+            "progress": row.progress,
+            "batches": row.batches.iter().map(|b| json!({ "count": b.count, "remaining_secs": b.remaining_secs })).collect::<Vec<_>>(),
+        })).collect();
+        let networks: Vec<Value> = s.networks.iter().map(|n| json!({
+            "network": n.index,
+            "depots": n.depots,
+            "gas_extractors": n.gas_extractors,
+            "mineral_extractors": n.mineral_extractors,
+            "stored": n.stored,
+            "capacity": n.capacity,
+            "full": n.is_full(),
+        })).collect();
+        let generators: Vec<Value> = s.power.generators.iter().map(|g| json!({ "kind": g.kind.display_name(), "count": g.count, "raw": g.raw })).collect();
+        json!({
+            "name": s.base.name,
+            "type": format!("{}", s.base.base_type),
+            "galaxy": s.galaxy_name,
+            "portal_glyphs_hex": s.portal_hex,
+            "distance_from_player": s.distance_from_player.map(format_distance),
+            "snapshot_unix": s.snapshot,
+            "snapshot_age_secs": s.snapshot.map(|t| (now - t).max(0)),
+            "crops_ready": s.crops_ready,
+            "crops_total": s.crops_total,
+            "crops": crops,
+            "extraction": { "stored": s.extraction_stored(), "capacity": s.extraction_capacity(), "full_networks": s.full_networks(), "networks": networks },
+            "power": {
+                "batteries": s.power.batteries,
+                "batteries_full": s.power.batteries_full,
+                "batteries_empty": s.power.batteries_empty,
+                "battery_charge": s.power.battery_charge,
+                "battery_capacity": s.power.battery_capacity,
+                "generators": generators,
+                "wires": s.power.wires,
+            },
+        })
+    }).collect();
+    let alerts: Vec<String> = alerts_from(&statuses).iter().map(|a| a.text()).collect();
+    Ok(json!({ "now_unix": now, "count": bases.len(), "bases": bases, "alerts": alerts }))
+}
+
+async fn handle_base_status(
+    model: Arc<RwLock<GalaxyModel>>,
+    args: Value,
+) -> Result<CallToolResult, ErrorData> {
+    let model = model.read().await;
+    let name = args.get("name").and_then(|v| v.as_str());
+    let json =
+        build_base_status_json(&model, name, unix_now()).map_err(|e| tool_error(&e.to_string()))?;
+    text_result(json)
+}
+
 async fn handle_convert(
     _model: Arc<RwLock<GalaxyModel>>,
     args: Value,
@@ -750,11 +847,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tools_has_all_eight() {
+    fn test_tools_has_all_nine() {
         let tools = NmsTools::new(test_model());
         let tool_list = tools.tools();
         let names: Vec<&str> = tool_list.iter().map(|t| t.name.as_ref()).collect();
-        assert_eq!(names.len(), 8);
+        assert_eq!(names.len(), 9);
+        assert!(names.contains(&"base_status"));
         assert!(names.contains(&"search_planets"));
         assert!(names.contains(&"plan_route"));
         assert!(names.contains(&"where_am_i"));
@@ -774,7 +872,28 @@ mod tests {
     #[test]
     fn test_tools_tool_count() {
         let tools = NmsTools::new(test_model());
-        assert_eq!(tools.tool_count(), 8);
+        assert_eq!(tools.tool_count(), 9);
+    }
+
+    #[tokio::test]
+    async fn test_base_status_tool_returns_bases_and_alerts() {
+        let tools = NmsTools::new(test_model());
+        let result = tools.call("base_status", json!({})).unwrap().await.unwrap();
+        let text = result.content[0]
+            .as_text()
+            .map(|t| t.text.clone())
+            .expect("text content");
+        let json: Value = serde_json::from_str(&text).unwrap();
+        assert!(json["count"].as_u64().unwrap() >= 1);
+        assert!(json["bases"][0]["extraction"]["networks"].is_array());
+        assert!(json["alerts"].is_array());
+        assert!(json["now_unix"].as_i64().unwrap() > 1_700_000_000);
+
+        let missing = tools
+            .call("base_status", json!({"name": "no such base"}))
+            .unwrap()
+            .await;
+        assert!(missing.is_err());
     }
 
     #[test]

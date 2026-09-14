@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process;
 
+mod base;
 mod completions;
 mod convert;
 mod export;
@@ -82,6 +83,20 @@ enum Commands {
 
         #[command(subcommand)]
         target: ShowTargetCmd,
+    },
+
+    /// Show crops, extraction networks, and power at your bases.
+    Base {
+        /// Path to save file (auto-detects if omitted).
+        #[arg(long)]
+        save: Option<PathBuf>,
+
+        /// Base name for the full view (exact, then substring match). Omit for a one-row-per-base overview.
+        name: Option<String>,
+
+        /// Layout width in columns for the full view (default: terminal width; sections stack when output is piped).
+        #[arg(long)]
+        width: Option<usize>,
     },
 
     /// Display aggregate galaxy statistics.
@@ -375,6 +390,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 ShowTargetCmd::Base { name } => show::ShowTarget::Base { name },
             };
             show::run(Some(path), target)
+        }
+        Commands::Base { save, name, width } => {
+            let path = resolve_save_with_slot(save, slot)?;
+            base::run(Some(path), name, width)
         }
         Commands::Stats {
             save,

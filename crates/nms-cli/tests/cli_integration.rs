@@ -483,3 +483,67 @@ fn test_nms_find_from_base_reference() {
         .assert()
         .success();
 }
+
+#[test]
+fn test_nms_base_overview_lists_bases() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["base", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BASES"))
+        .stdout(predicate::str::contains("Lush Haven"))
+        .stdout(predicate::str::contains("Frost Outpost"))
+        .stdout(predicate::str::contains(" / 5"))
+        .stdout(predicate::str::contains("1 of 2 FULL"));
+}
+
+#[test]
+fn test_nms_base_detail_shows_sections() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["base", "lush", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CROPS"))
+        .stdout(predicate::str::contains("Frost Crystal"))
+        .stdout(predicate::str::contains("Gamma Root"))
+        .stdout(predicate::str::contains("EXTRACTION"))
+        .stdout(predicate::str::contains("2,250"))
+        .stdout(predicate::str::contains("FULL"))
+        .stdout(predicate::str::contains("POWER"))
+        .stdout(predicate::str::contains("Solar Panel"))
+        .stdout(predicate::str::contains("Electromagnetic Generator"))
+        .stdout(predicate::str::contains("as of"));
+}
+
+#[test]
+fn test_nms_base_unknown_name_fails() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["base", "no such base", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("base not found"));
+}
+
+#[test]
+fn test_nms_base_detail_width_places_sections_side_by_side() {
+    let fixture = fixture_path("multi_system_save.json");
+    let output = cargo_bin_cmd!("nms")
+        .args([
+            "base",
+            "lush",
+            "--width",
+            "200",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let title_line = stdout.lines().find(|l| l.contains("BASE")).unwrap();
+    assert!(title_line.contains("CROPS"), "{stdout}");
+    assert!(title_line.contains("EXTRACTION"), "{stdout}");
+}

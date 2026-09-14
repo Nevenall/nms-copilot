@@ -4,7 +4,9 @@
 //! Each formatter accepts a [`Theme`] for API compatibility but uses
 //! `nms_theme()` / `nms_theme_no_color()` for table styling internally.
 
+use crate::base::{Alert, AlertKind, AlertSummary, BaseStatus, CropRow, PowerSummary};
 use crate::find::FindResult;
+use crate::layout::side_by_side;
 use crate::route::RouteResult;
 use crate::show::{ShowBaseResult, ShowResult, ShowSystemResult};
 use crate::stats::StatsResult;
@@ -420,6 +422,382 @@ pub fn format_route(result: &RouteResult, model: &nms_graph::GalaxyModel, theme:
     out.push_str(&format!("  Algorithm: {algo_name}\n"));
 
     out
+}
+
+// ── Base status ─────────────────────────────────────────────────
+
+/// Format a duration in seconds as `1d 03h`, `2h 05m`, `45m`, or `< 1m`.
+pub fn format_duration(secs: i64) -> String {
+    let secs = secs.max(0);
+    let days = secs / 86_400;
+    let hours = (secs % 86_400) / 3_600;
+    let minutes = (secs % 3_600) / 60;
+    if days > 0 {
+        format!("{days}d {hours:02}h")
+    } else if hours > 0 {
+        format!("{hours}h {minutes:02}m")
+    } else if minutes > 0 {
+        format!("{minutes}m")
+    } else {
+        "< 1m".to_string()
+    }
+}
+
+/// Format a snapshot instant as local time plus its age: `2026-09-14 09:08 (12m ago)`.
+pub fn format_snapshot(snapshot: i64, now: i64) -> String {
+    let local = chrono::DateTime::<chrono::Utc>::from_timestamp(snapshot, 0)
+        .map(|t| {
+            t.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown time".to_string());
+    format!("{local} ({} ago)", format_duration(now - snapshot))
+}
+
+/// Insert thousands separators: `4750` becomes `4,750`.
+pub fn thousands(n: u32) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Short label for a base type: `home`, `planet`, `freighter`.
+pub fn base_type_label(bt: &nms_core::BaseType) -> String {
+    match bt {
+        nms_core::BaseType::HomePlanetBase => "home".to_string(),
+        nms_core::BaseType::ExternalPlanetBase => "planet".to_string(),
+        nms_core::BaseType::FreighterBase => "freighter".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn crops_cell(status: &BaseStatus) -> String {
+    if status.crops_total == 0 {
+        "-".to_string()
+    } else {
+        format!("{} / {}", status.crops_ready, status.crops_total)
+    }
+}
+
+fn extraction_cell(status: &BaseStatus) -> String {
+    if status.networks.is_empty() {
+        return "-".to_string();
+    }
+    let mut cell = format!(
+        "{} / {}",
+        thousands(status.extraction_stored()),
+        thousands(status.extraction_capacity())
+    );
+    let full = status.full_networks();
+    if full == status.networks.len() {
+        cell.push_str("  FULL");
+    } else if full > 0 {
+        cell.push_str(&format!("  {full} of {} FULL", status.networks.len()));
+    }
+    cell
+}
+
+fn power_cell(power: &PowerSummary) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if power.batteries > 0 {
+        let noun = if power.batteries == 1 {
+            "battery"
+        } else {
+            "batteries"
+        };
+        let state = if power.batteries_full == power.batteries {
+            "full".to_string()
+        } else if power.batteries_empty == power.batteries {
+            "empty".to_string()
+        } else {
+            format!("{} full", power.batteries_full)
+        };
+        parts.push(format!("{} {noun} {state}", power.batteries));
+    }
+    for g in &power.generators {
+        let word = match g.kind {
+            nms_core::GeneratorKind::SolarPanel => "solar",
+            nms_core::GeneratorKind::BiofuelReactor => "biofuel",
+            nms_core::GeneratorKind::ElectromagneticGenerator => "electromagnetic",
+            _ => "generator",
+        };
+        parts.push(format!("{} {word}", g.count));
+    }
+    if parts.is_empty() {
+        "-".to_string()
+    } else {
+        parts.join(" \u{00B7} ")
+    }
+}
+
+/// One row per base: crops ready of total, extraction stored of capacity, power state.
+pub fn format_base_overview(statuses: &[BaseStatus], theme: &Theme) -> String {
+    if statuses.is_empty() {
+        return "  No bases found.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record(["Name", "Type", "Crops", "Extraction", "Power"]);
+    for status in statuses {
+        let name = if status.base.name.is_empty() {
+            format!("({})", base_type_label(&status.base.base_type))
+        } else {
+            status.base.name.clone()
+        };
+        builder.push_record([
+            truncate(&name, 28),
+            base_type_label(&status.base.base_type),
+            crops_cell(status),
+            extraction_cell(status),
+            power_cell(&status.power),
+        ]);
+    }
+    builder.push_record(["", "", "", "", ""]);
+    build_table(builder, &["BASES"], &table_theme, "Bases")
+}
+
+fn next_ready_cell(row: &CropRow) -> String {
+    let multi = row.batches.len() > 1;
+    row.batches
+        .iter()
+        .map(|b| {
+            let when = match b.remaining_secs {
+                Some(0) => "now".to_string(),
+                Some(secs) => format!("in {}", format_duration(secs)),
+                None => format!("grown {}", format_duration(row.grown_secs)),
+            };
+            if multi {
+                format!("{when} ({})", b.count)
+            } else {
+                when
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Full view of one base: location, then crops, extraction, and power sections where present.
+///
+/// With a terminal `width` the sections are placed side by side as far as they fit; with `None` they are stacked.
+pub fn format_base_detail(
+    status: &BaseStatus,
+    now: i64,
+    theme: &Theme,
+    width: Option<usize>,
+) -> String {
+    let table_theme = table_theme_for(theme);
+    let base = &status.base;
+    let name = if base.name.is_empty() {
+        format!("({})", base_type_label(&base.base_type))
+    } else {
+        base.name.clone()
+    };
+    let mut blocks: Vec<String> = Vec::new();
+
+    let mut builder = Builder::default();
+    builder.push_record(["Property", "Detail"]);
+    builder.push_record(["Name", &name]);
+    builder.push_record(["Type", &base_type_label(&base.base_type)]);
+    builder.push_record(["Galaxy", &status.galaxy_name]);
+    if let Some(ref system) = status.system {
+        builder.push_record(["System", system.name.as_deref().unwrap_or("-")]);
+    }
+    builder.push_record(["Portal Glyphs", &hex_to_emoji(&status.portal_hex)]);
+    builder.push_record(["Hex Address", &status.portal_hex]);
+    if let Some(dist) = status.distance_from_player {
+        builder.push_record(["Distance", &format_distance(dist)]);
+    }
+    builder.push_record(["Objects", &base.objects.total().to_string()]);
+    builder.push_record(["", ""]);
+    blocks.push(build_table(builder, &["BASE"], &table_theme, ""));
+
+    // A table followed by its snapshot line, as one block.
+    let with_snapshot = |table: String| -> String {
+        match status.snapshot {
+            Some(snapshot) => format!(
+                "{}\n  as of {}\n\n",
+                table.trim_end_matches('\n'),
+                format_snapshot(snapshot, now)
+            ),
+            None => table,
+        }
+    };
+
+    if !status.crops.is_empty() {
+        let mut builder = Builder::default();
+        builder.push_record(["Crop", "Count", "Ready", "Next ready", "Progress"]);
+        for row in &status.crops {
+            let progress = row
+                .progress
+                .map(|p| format!("{:.0}%", p * 100.0))
+                .unwrap_or_else(|| "-".to_string());
+            builder.push_record([
+                row.label.clone(),
+                row.count.to_string(),
+                row.ready.to_string(),
+                next_ready_cell(row),
+                progress,
+            ]);
+        }
+        builder.push_record(["", "", "", "", ""]);
+        blocks.push(with_snapshot(build_table(
+            builder,
+            &["CROPS"],
+            &table_theme,
+            "",
+        )));
+    }
+
+    if !status.networks.is_empty() {
+        let mut builder = Builder::default();
+        builder.push_record([
+            "Network",
+            "Extractors",
+            "Depots",
+            "Stored",
+            "Capacity",
+            "Fill",
+        ]);
+        for net in &status.networks {
+            let mut extractors: Vec<String> = Vec::new();
+            if net.gas_extractors > 0 {
+                extractors.push(format!("{} gas", net.gas_extractors));
+            }
+            if net.mineral_extractors > 0 {
+                extractors.push(format!("{} mineral", net.mineral_extractors));
+            }
+            let extractors = if extractors.is_empty() {
+                "-".to_string()
+            } else {
+                extractors.join(", ")
+            };
+            let fill = if net.is_full() {
+                "FULL".to_string()
+            } else {
+                format!("{:.0}%", net.fill() * 100.0)
+            };
+            builder.push_record([
+                net.index.to_string(),
+                extractors,
+                net.depots.to_string(),
+                thousands(net.stored),
+                thousands(net.capacity),
+                fill,
+            ]);
+        }
+        builder.push_record(["", "", "", "", "", ""]);
+        blocks.push(with_snapshot(build_table(
+            builder,
+            &["EXTRACTION"],
+            &table_theme,
+            "",
+        )));
+    }
+
+    let power = &status.power;
+    if power.batteries > 0 || !power.generators.is_empty() || power.wires > 0 {
+        let mut builder = Builder::default();
+        builder.push_record(["Source", "Count", "State"]);
+        for g in &power.generators {
+            // Every kind seen so far reads 0 when it has nothing to say; anything else is shown raw until it is decoded.
+            let state = if g.raw.iter().all(|r| *r == 0) {
+                "-".to_string()
+            } else {
+                format!(
+                    "raw {}",
+                    g.raw
+                        .iter()
+                        .map(|r| thousands(*r))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            builder.push_record([
+                g.kind.display_name().to_string(),
+                g.count.to_string(),
+                state,
+            ]);
+        }
+        if power.batteries > 0 {
+            let mut state = format!(
+                "{} / {}",
+                thousands(power.battery_charge),
+                thousands(power.battery_capacity)
+            );
+            if power.batteries_full == power.batteries {
+                state.push_str(", full");
+            } else if power.batteries_empty == power.batteries {
+                state.push_str(", empty");
+            } else {
+                state.push_str(&format!(
+                    ", {} full, {} empty",
+                    power.batteries_full, power.batteries_empty
+                ));
+            }
+            builder.push_record(["Battery".to_string(), power.batteries.to_string(), state]);
+        }
+        if power.wires > 0 {
+            builder.push_record([
+                "Wires".to_string(),
+                power.wires.to_string(),
+                "-".to_string(),
+            ]);
+        }
+        builder.push_record(["", "", ""]);
+        blocks.push(build_table(builder, &["POWER"], &table_theme, ""));
+    }
+
+    side_by_side(&blocks, width, 2)
+}
+
+/// One-line summary of current alerts, for startup and `status`.
+pub fn format_alert_line(alerts: &[Alert]) -> String {
+    let ready: Vec<String> = alerts
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AlertKind::CropsReady { crop, count } => Some(format!("{count} {crop} at {}", a.base)),
+            AlertKind::DepotsFull { .. } => None,
+        })
+        .collect();
+    let full: Vec<String> = alerts
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AlertKind::DepotsFull { network, .. } => {
+                Some(format!("{} (network {network})", a.base))
+            }
+            AlertKind::CropsReady { .. } => None,
+        })
+        .collect();
+    let ready = if ready.is_empty() {
+        "Ready: nothing".to_string()
+    } else {
+        format!("Ready: {}", ready.join(", "))
+    };
+    let full = if full.is_empty() {
+        "Full depots: none".to_string()
+    } else {
+        format!("Full depots: {}", full.join(", "))
+    };
+    format!("{ready}. {full}.")
+}
+
+/// Compact indicator for the prompt: `🌱 16 ready · 📦 1 full`, or empty when nothing is pending.
+pub fn format_alert_indicator(summary: &AlertSummary) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if summary.crops_ready > 0 {
+        parts.push(format!("\u{1F331} {} ready", summary.crops_ready));
+    }
+    if summary.networks_full > 0 {
+        parts.push(format!("\u{1F4E6} {} full", summary.networks_full));
+    }
+    parts.join(" \u{00B7} ")
 }
 
 /// Truncate a string to `max_len` characters, appending "..." if truncated.
@@ -901,5 +1279,202 @@ mod tests {
         let output = format_route(&result, &model, &plain());
         assert!(output.contains("*"));
         assert!(output.contains("\u{21B3}"));
+    }
+    mod base_status {
+        use super::*;
+        use crate::base::{BaseQuery, execute_base};
+        use nms_core::player::{BaseType, PlayerBase};
+        use nms_core::{BaseObjects, RawBaseObject};
+        use nms_graph::GalaxyModel;
+
+        const SNAPSHOT: i64 = 1_789_402_087;
+
+        fn raw(object_id: &str, hi: u64) -> RawBaseObject<'_> {
+            RawBaseObject {
+                object_id,
+                timestamp: SNAPSHOT,
+                user_data: hi << 32,
+            }
+        }
+
+        fn model() -> GalaxyModel {
+            let mut raws = Vec::new();
+            raws.extend(vec![raw("^SNOWPLANT", 3600); 16]);
+            raws.extend(vec![raw("^BARRENPLANT", 3927); 13]);
+            raws.extend(vec![raw("^BARRENPLANT", 30_000); 3]);
+            raws.extend(vec![raw("^U_GASEXTRACTOR", 154_712); 3]);
+            raws.extend(vec![raw("^U_SILO_S", 154_712); 4]);
+            raws.push(raw("^U_SILO_S", 1_440_000));
+            raws.push(raw("^U_BATTERY_S", 45_000));
+            raws.extend(vec![raw("^U_GENERATOR_S", 0); 4]);
+            raws.extend(vec![raw("^U_POWERLINE", 0); 30]);
+            let farm = PlayerBase::new(
+                "Farm".into(),
+                BaseType::HomePlanetBase,
+                GalacticAddress::new(0, 0, 0, 1, 0, 0),
+                [0.0; 3],
+                None,
+            )
+            .with_objects(BaseObjects::decode(raws));
+            let bare = PlayerBase::new(
+                "Outpost".into(),
+                BaseType::ExternalPlanetBase,
+                GalacticAddress::new(0, 0, 0, 2, 0, 0),
+                [0.0; 3],
+                None,
+            );
+            let mut model = GalaxyModel::new();
+            model.insert_base(farm);
+            model.insert_base(bare);
+            model
+        }
+
+        #[test]
+        fn duration_and_thousands() {
+            assert_eq!(format_duration(0), "< 1m");
+            assert_eq!(format_duration(59), "< 1m");
+            assert_eq!(format_duration(2_700), "45m");
+            assert_eq!(format_duration(7_260), "2h 01m");
+            assert_eq!(format_duration(97_200), "1d 03h");
+            assert_eq!(format_duration(-5), "< 1m");
+            assert_eq!(thousands(0), "0");
+            assert_eq!(thousands(999), "999");
+            assert_eq!(thousands(4_750), "4,750");
+            assert_eq!(thousands(1_440_000), "1,440,000");
+        }
+
+        #[test]
+        fn snapshot_shows_age() {
+            let text = format_snapshot(SNAPSHOT, SNAPSHOT + 720);
+            assert!(text.ends_with("(12m ago)"), "{text}");
+            assert!(text.starts_with("2026-09-14"), "{text}");
+        }
+
+        #[test]
+        fn overview_lists_every_base_with_cells() {
+            let statuses = execute_base(&model(), &BaseQuery::default(), SNAPSHOT).unwrap();
+            let out = format_base_overview(&statuses, &plain());
+            assert!(out.contains("BASES"));
+            assert!(out.contains("16 / 32"), "{out}");
+            assert!(out.contains("1,749 / 5,750  1 of 2 FULL"), "{out}");
+            assert!(
+                out.contains("1 battery full \u{00B7} 4 electromagnetic"),
+                "{out}"
+            );
+            assert!(out.contains("Outpost"));
+            let farm_line = out.lines().find(|l| l.contains("Farm")).unwrap();
+            let outpost_line = out.lines().find(|l| l.contains("Outpost")).unwrap();
+            assert!(
+                out.find(farm_line).unwrap() < out.find(outpost_line).unwrap(),
+                "alerting base first"
+            );
+        }
+
+        #[test]
+        fn detail_has_all_sections_and_batches() {
+            let statuses = execute_base(
+                &model(),
+                &BaseQuery {
+                    name: Some("farm".into()),
+                },
+                SNAPSHOT,
+            )
+            .unwrap();
+            let out = format_base_detail(&statuses[0], SNAPSHOT + 60, &plain(), None);
+            assert!(out.contains("BASE"));
+            assert!(out.contains("CROPS"));
+            assert!(out.contains("EXTRACTION"));
+            assert!(out.contains("POWER"));
+            assert!(out.contains("Frost Crystal"));
+            assert!(out.contains("now"));
+            assert!(out.contains("in 7h 40m (3), in 14h 54m (13)"), "{out}");
+            assert!(out.contains("3 gas"));
+            assert!(out.contains("4,750"));
+            assert!(out.contains("FULL"));
+            assert!(out.contains("Electromagnetic Generator"));
+            assert!(out.contains("45,000 / 45,000, full"));
+            assert!(out.contains("as of"));
+            assert!(out.contains("(1m ago)"));
+        }
+
+        #[test]
+        fn detail_places_sections_side_by_side_when_wide() {
+            let statuses = execute_base(
+                &model(),
+                &BaseQuery {
+                    name: Some("farm".into()),
+                },
+                SNAPSHOT,
+            )
+            .unwrap();
+            let wide = format_base_detail(&statuses[0], SNAPSHOT, &plain(), Some(400));
+            let title_line = wide.lines().find(|l| l.contains("BASE")).unwrap();
+            assert!(
+                title_line.contains("CROPS")
+                    && title_line.contains("EXTRACTION")
+                    && title_line.contains("POWER"),
+                "{wide}"
+            );
+            assert!(
+                wide.lines()
+                    .any(|l| l.contains("Frost Crystal") && l.contains("3 gas")),
+                "{wide}"
+            );
+
+            let medium = format_base_detail(&statuses[0], SNAPSHOT, &plain(), Some(120));
+            let titles: Vec<&str> = medium
+                .lines()
+                .filter(|l| l.contains("BASE") || l.contains("EXTRACTION"))
+                .collect();
+            assert_eq!(titles.len(), 2, "{medium}");
+            assert!(titles[0].contains("CROPS"), "{medium}");
+            assert!(titles[1].contains("POWER"), "{medium}");
+
+            let narrow = format_base_detail(&statuses[0], SNAPSHOT, &plain(), Some(40));
+            let stacked = format_base_detail(&statuses[0], SNAPSHOT, &plain(), None);
+            for title in ["BASE", "CROPS", "EXTRACTION", "POWER"] {
+                assert_eq!(
+                    narrow.lines().filter(|l| l.contains(title)).count(),
+                    1,
+                    "{narrow}"
+                );
+                assert!(stacked.contains(title));
+            }
+            assert!(
+                !narrow
+                    .lines()
+                    .any(|l| l.contains("BASE") && l.contains("CROPS"))
+            );
+        }
+
+        #[test]
+        fn detail_omits_sections_that_do_not_apply() {
+            let statuses = execute_base(
+                &model(),
+                &BaseQuery {
+                    name: Some("Outpost".into()),
+                },
+                SNAPSHOT,
+            )
+            .unwrap();
+            let out = format_base_detail(&statuses[0], SNAPSHOT, &plain(), None);
+            assert!(out.contains("BASE"));
+            assert!(!out.contains("CROPS"));
+            assert!(!out.contains("EXTRACTION"));
+            assert!(!out.contains("POWER"));
+        }
+
+        #[test]
+        fn alert_line_and_indicator() {
+            let alerts = crate::base::current_alerts(&model(), SNAPSHOT);
+            assert_eq!(
+                format_alert_line(&alerts),
+                "Ready: 16 Frost Crystal at Farm. Full depots: Farm (network 2)."
+            );
+            assert_eq!(format_alert_line(&[]), "Ready: nothing. Full depots: none.");
+            let indicator = format_alert_indicator(&AlertSummary::from_alerts(&alerts));
+            assert_eq!(indicator, "\u{1F331} 16 ready \u{00B7} \u{1F4E6} 1 full");
+            assert_eq!(format_alert_indicator(&AlertSummary::default()), "");
+        }
     }
 }

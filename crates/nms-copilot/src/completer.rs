@@ -31,8 +31,8 @@ impl CopilotCompleter {
 }
 
 const COMMANDS: &[&str] = &[
-    "convert", "exit", "find", "help", "info", "list", "map", "quit", "reset", "route", "set",
-    "show", "stats", "status",
+    "base", "convert", "exit", "find", "help", "info", "list", "map", "quit", "reset", "route",
+    "set", "show", "stats", "status",
 ];
 
 const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];
@@ -50,6 +50,8 @@ const FIND_FLAGS: &[&str] = &[
 ];
 
 const STATS_FLAGS: &[&str] = &["--biomes", "--discoveries"];
+
+const BASE_FLAGS: &[&str] = &["--width"];
 
 const CONVERT_FLAGS: &[&str] = &[
     "--glyphs", "--coords", "--ga", "--voxel", "--ssi", "--planet", "--galaxy",
@@ -111,6 +113,19 @@ impl Completer for CopilotCompleter {
             }
             ["show", "base", _] if !trailing_space => {
                 return self.complete_names(words[2], &self.model_data.base_names, pos);
+            }
+
+            ["base", ..] if !trailing_space && words.last().is_some_and(|w| w.starts_with('-')) => {
+                return self.filter_suggestions(words[words.len() - 1], BASE_FLAGS, pos);
+            }
+            ["base"] if trailing_space => {
+                return self.complete_names("", &self.model_data.base_names, pos);
+            }
+            ["base", _] if !trailing_space => {
+                return self.complete_names(words[1], &self.model_data.base_names, pos);
+            }
+            ["base", _, ..] if trailing_space => {
+                return self.filter_suggestions("", BASE_FLAGS, pos);
             }
 
             ["show", "system"] if trailing_space => {
@@ -499,5 +514,22 @@ mod tests {
         let results = c.complete("FIND --b", 8);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
         assert!(values.contains(&"--biome"));
+    }
+
+    #[test]
+    fn test_complete_base_command_offers_base_names() {
+        let mut c = test_completer();
+        let results = c.complete("base A", 6);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(values.iter().any(|v| v.contains("Acadia")));
+        assert!(values.iter().any(|v| v.contains("Alpha")));
+        let results = c.complete("base ", 5);
+        assert_eq!(results.len(), 3);
+        let results = c.complete("base farm ", 10);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["--width"]);
+        let results = c.complete("base --w", 8);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["--width"]);
     }
 }

@@ -15,6 +15,9 @@ pub enum ShowQuery {
 }
 
 /// Result of a show query.
+///
+/// The base variant carries the base's decoded objects, so it is much larger than the system variant; results are built once per command, so boxing would only add noise.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ShowResult {
     System(ShowSystemResult),

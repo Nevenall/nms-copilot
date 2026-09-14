@@ -7,8 +7,10 @@ use nms_core::galaxy::{Galaxy, GalaxyType};
 use nms_graph::GalaxyModel;
 use nms_graph::query::BiomeFilter;
 use nms_graph::route::RoutingAlgorithm;
+use nms_query::base::{BaseQuery, execute_base};
 use nms_query::display::{
-    format_find_results, format_route, format_show_result, format_stats, hex_to_emoji,
+    format_base_detail, format_base_overview, format_find_results, format_route,
+    format_show_result, format_stats, hex_to_emoji,
 };
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
@@ -71,6 +73,7 @@ pub fn dispatch(
         Action::List { target } => dispatch_list(model, target),
 
         Action::Show { target } => dispatch_show(model, target),
+        Action::Base { name, width } => dispatch_base(model, name.as_deref(), *width),
 
         Action::Stats {
             biomes,
@@ -552,6 +555,34 @@ fn resolve_galaxy(input: &str) -> Result<u8, String> {
     ))
 }
 
+/// `base` / `base <name>`: overview of every base, or the full view of the matching ones.
+fn dispatch_base(
+    model: &GalaxyModel,
+    name: Option<&str>,
+    width: Option<usize>,
+) -> Result<String, String> {
+    let now = crate::session::unix_now();
+    let statuses = execute_base(
+        model,
+        &BaseQuery {
+            name: name.map(str::to_string),
+        },
+        now,
+    )
+    .map_err(|e| e.to_string())?;
+    let theme = Theme::default_dark();
+    let width = width.or_else(nms_query::layout::terminal_width);
+    if name.is_some() {
+        Ok(statuses
+            .iter()
+            .map(|s| format_base_detail(s, now, &theme, width))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    } else {
+        Ok(format_base_overview(&statuses, &theme))
+    }
+}
+
 fn base_type_label(bt: &BaseType) -> &'static str {
     match bt {
         BaseType::HomePlanetBase => "home",
@@ -615,6 +646,7 @@ Commands:
   map        Open interactive galaxy map
   route      Plan a route through discovered systems
   show       Show system or base details
+  base       Show crops, extraction networks, and power at your bases
   stats      Display aggregate galaxy statistics
   convert    Convert between coordinate formats
   set        Set session context (position, biome, warp-range)
@@ -632,6 +664,8 @@ Examples:
   route --target \"Alpha Base\" --target \"Beta Base\"
   show system 0x050003AB8C07
   show base \"Acadia National Park\"
+  base
+  base \"Farm\"
   stats --biomes
   convert --glyphs 01717D8A4EA2
   set biome Lush
