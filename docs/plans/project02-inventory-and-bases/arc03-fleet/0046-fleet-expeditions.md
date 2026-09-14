@@ -54,9 +54,9 @@ Each event:
 
 **Progress** is `NextEventToTrigger` of `Events.len()`, with `Success` on each resolved event. Events are generated up front, so the total is known from the start.
 
-**Waiting for the player.** When `InterventionPhoneCallActivated` is true and `Events[NextEventToTrigger].IsInterventionEvent` is true, the fleet is holding for a decision, the state the game labels "waiting for player". `PauseTime` is most likely the moment that hold began: on the sample it is 07:42, the fleet's last move was 08:01, and the in-game timer stopped. Treat the exact meaning of `PauseTime` as inferred until verified (see Verification).
+**Waiting for the player.** When `InterventionPhoneCallActivated` is true and `Events[NextEventToTrigger].IsInterventionEvent` is true, the fleet is holding for a decision, the state the game labels "waiting for player". `PauseTime` is the moment that hold began and is 0 otherwise. Answering the call zeroes it and shifts `StartTime` forward by the length of the hold, so active time is always `(PauseTime or now) − StartTime` (verified 2026-09-14, see the reference notes). An answered intervention event keeps `Success` false, so resolved means `index < NextEventToTrigger`.
 
-**Time remaining is not stored.** Only the duration class is. Community figures put Short at about an hour, Medium at four to five, Long at 21 to 24, and Very Long at up to 28, growing with fleet size and shrinking with a Fuel Oxidiser. A better estimate comes from the run itself: resolved events divided by active time give the cadence. On the sample, 16 events in 52,417 seconds is 55 minutes per event, so two remaining events mean about two hours once the call is answered. The tool shows that as an estimate and never as a countdown.
+**Time remaining is not stored.** Only the duration class is. Community figures put Short at about an hour, Medium at four to five, Long at 21 to 24, and Very Long at up to 28, growing with fleet size and shrinking with a Fuel Oxidiser. The one measured run implies a total of 59,272 seconds (16h 28m) for Very Long with five frigates at speed 1.0. A per-run estimate comes from the run itself: resolved events divided by active time give the cadence. On the sample, 16 events in 52,417 seconds is 55 minutes per event, and that predicted the game's post-answer figure within five minutes while two events remained, but the final leg proved longer than a mid-route event. The tool shows the estimate as "about" and never as a countdown; once more runs pin the totals per duration class, a class table can replace the cadence.
 
 ### The fleet: `PlayerStateData.FleetFrigates[]`
 
@@ -186,8 +186,8 @@ The watcher's snapshot and delta carry systems, planets, player position, and ba
 
 In-game checks against the sample save:
 
-1. Open the Fleet Command Room while the call is pending and note the remaining time; save; wait; save again. If the remaining time did not move, the expedition pauses during the call and `PauseTime` marks its start.
-2. Answer the call, then compare the resumed remaining time with the cadence estimate.
+1. ~~Open the Fleet Command Room while the call is pending and note the remaining time; save; wait; save again.~~ Done 2026-09-14 from the save side: the room goes straight to the call, but no timing field moved in six hours of holding, and answering shifted `StartTime` by exactly the hold. The expedition pauses and `PauseTime` marks its start.
+2. ~~Answer the call, then compare the resumed remaining time with the cadence estimate.~~ Done 2026-09-14: game showed 1h 54m 15s, cadence said 1h 50m for the two events outstanding. Expected finish Unix 1789425510; compare when it lands.
 3. Let the expedition finish without debriefing, save, and read the expedition's shape.
 4. After 00:00 UTC, save before talking to the Navigator and check whether `LastKnownDay` and the seeds change on load or only on talking to the Navigator.
 5. Open one frigate's details and confirm the order of the stats against `Stats[0..6]`.
@@ -196,10 +196,11 @@ In-game checks against the sample save:
 
 ## Open questions
 
-1. What exactly does `PauseTime` mark, and is it reset when the call is answered?
+1. ~~What exactly does `PauseTime` mark, and is it reset when the call is answered?~~ Answered: the hold's start; reset to 0 and `StartTime` shifted forward by the hold length.
 2. How is a completed, undebriefed expedition represented, and does debriefing remove it from `FleetExpeditions`?
 3. Does `LastKnownDay` roll on game load or only when the Navigator is used?
 4. What do `Stats[4]` and `Stats[6..11]` hold?
 5. What is `FreighterFleet[8]`?
 6. What is `TimeOfLastIncomeCollection`?
 7. Which consumable sets `SpeedMultiplier`, and to what?
+8. Why did `NumberOfFailedEventsThisExpedition` rise from 0 to 2 when one intervention event was answered? The call asked for credits to fund an investment and the player paid; the result was not shown at the time, so the debrief may explain it.
