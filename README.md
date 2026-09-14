@@ -147,6 +147,18 @@ nms stats --discoveries               # discovery counts by type
 nms saves                             # list all save slots
 ```
 
+### Raw Save Inspection
+
+`nms raw` prints any part of the decoded save as JSON, for finding out what the file holds before the model does. Output is pruned by depth and array length so it stays readable; pruned parts show as `{… N keys}`, `[… N items]`, or `… N more`.
+
+```bash
+nms raw --keys                                                   # what is at the root
+nms raw BaseContext.PlayerStateData --keys                       # every field of the player state, with types and sizes
+nms raw BaseContext.PlayerStateData.FleetExpeditions[0] --depth 1
+nms raw BaseContext.PlayerStateData.FleetFrigates --limit 0      # every element, not just the first 10
+nms raw --find UserData                                          # every key containing "UserData", with its path
+```
+
 ### Coordinate Conversion
 
 ```bash

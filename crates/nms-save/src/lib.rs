@@ -44,6 +44,16 @@ pub fn parse_save(json: &[u8]) -> Result<SaveRoot, SaveError> {
 /// This is the high-level entry point for reading NMS save files.
 /// For already-decompressed, already-deobfuscated JSON bytes, use [`parse_save`] instead.
 pub fn parse_save_file(path: &std::path::Path) -> Result<SaveRoot, SaveError> {
+    let value = read_save_json(path)?;
+    serde_json::from_value(value).map_err(|e| SaveError::JsonParseError {
+        message: e.to_string(),
+    })
+}
+
+/// Read a save file from disk as decoded JSON with plaintext keys.
+///
+/// Runs the pipeline up to, but not including, deserialization into [`SaveRoot`]: read, decompress, sanitize, and deobfuscate keys if the save is obfuscated. Use this to inspect fields the typed model does not carry.
+pub fn read_save_json(path: &std::path::Path) -> Result<serde_json::Value, SaveError> {
     let raw = std::fs::read(path)?;
     let decompressed = decompress_save(&raw)?;
 
@@ -56,12 +66,11 @@ pub fn parse_save_file(path: &std::path::Path) -> Result<SaveRoot, SaveError> {
     // "Version" key).
     if is_obfuscated_bytes(json_bytes.as_bytes()) {
         let mapping = KeyMapping::bundled();
-        let value = deobfuscate_json(json_bytes.as_bytes(), &mapping)?;
-        serde_json::from_value(value).map_err(|e| SaveError::JsonParseError {
+        deobfuscate_json(json_bytes.as_bytes(), &mapping)
+    } else {
+        serde_json::from_str(&json_bytes).map_err(|e| SaveError::JsonParseError {
             message: e.to_string(),
         })
-    } else {
-        parse_save(json_bytes.as_bytes())
     }
 }
 

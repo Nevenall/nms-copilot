@@ -10,6 +10,7 @@ mod find;
 mod import;
 mod info;
 mod list;
+mod raw;
 mod route;
 mod saves;
 mod show;
@@ -245,6 +246,32 @@ enum Commands {
         source: String,
     },
 
+    /// Print any part of the decoded save as JSON (a probe for save research).
+    Raw {
+        /// Path to save file (auto-detects if omitted).
+        #[arg(long)]
+        save: Option<PathBuf>,
+
+        /// Dotted path from the save root, e.g. BaseContext.PlayerStateData.FleetExpeditions[0].Events (omit for the root).
+        path: Option<String>,
+
+        /// Levels of nesting to print below the target (0 = unlimited).
+        #[arg(long, default_value = "3")]
+        depth: usize,
+
+        /// Array items to print per array (0 = unlimited).
+        #[arg(long, default_value = "10")]
+        limit: usize,
+
+        /// List the keys at the target with their types and sizes instead of printing it.
+        #[arg(long)]
+        keys: bool,
+
+        /// Search key names below the target for this text (case-insensitive) and print where they occur.
+        #[arg(long)]
+        find: Option<String>,
+    },
+
     /// Generate shell completions.
     Completions {
         /// Shell to generate completions for: bash, zsh, fish, powershell, elvish.
@@ -462,6 +489,24 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             })
         }
         Commands::Import { file, save, source } => import::run(file, save, source),
+        Commands::Raw {
+            save,
+            path,
+            depth,
+            limit,
+            keys,
+            find,
+        } => {
+            let save = resolve_save_with_slot(save, slot)?;
+            raw::run(raw::RawArgs {
+                save: Some(save),
+                path,
+                depth,
+                limit,
+                keys,
+                find,
+            })
+        }
         Commands::Completions { shell } => completions::run(shell),
         Commands::Saves => saves::run(),
     }

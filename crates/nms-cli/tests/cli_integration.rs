@@ -484,6 +484,85 @@ fn test_nms_find_from_base_reference() {
         .success();
 }
 
+// ---- Raw command tests ----
+
+#[test]
+fn test_nms_raw_prints_value_at_path() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args([
+            "raw",
+            "BaseContext.PlayerStateData.PersistentPlayerBases[0].Name",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Lush Haven"));
+}
+
+#[test]
+fn test_nms_raw_root_is_pruned_by_default() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["raw", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BaseContext"))
+        .stdout(predicate::str::contains("keys}"));
+}
+
+#[test]
+fn test_nms_raw_keys_lists_children() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args([
+            "raw",
+            "BaseContext.PlayerStateData",
+            "--keys",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PersistentPlayerBases"))
+        .stdout(predicate::str::contains("array (2 items)"));
+}
+
+#[test]
+fn test_nms_raw_find_reports_key_paths() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args([
+            "raw",
+            "--find",
+            "galacticaddress",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "PersistentPlayerBases[*].GalacticAddress",
+        ));
+}
+
+#[test]
+fn test_nms_raw_missing_key_lists_alternatives() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args([
+            "raw",
+            "BaseContext.Nope",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no key `Nope`"))
+        .stderr(predicate::str::contains("PlayerStateData"));
+}
+
 #[test]
 fn test_nms_base_overview_lists_bases() {
     let fixture = fixture_path("multi_system_save.json");
