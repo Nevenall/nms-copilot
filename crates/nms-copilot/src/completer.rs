@@ -31,8 +31,8 @@ impl CopilotCompleter {
 }
 
 const COMMANDS: &[&str] = &[
-    "base", "convert", "exit", "find", "fleet", "help", "info", "list", "map", "quit", "reset",
-    "route", "set", "show", "stats", "status",
+    "backup", "base", "convert", "exit", "find", "fleet", "help", "info", "list", "map", "quit",
+    "reset", "route", "set", "show", "stats", "status",
 ];
 
 const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];
@@ -54,6 +54,8 @@ const STATS_FLAGS: &[&str] = &["--biomes", "--discoveries"];
 const BASE_FLAGS: &[&str] = &["--width"];
 
 const FLEET_SUBCOMMANDS: &[&str] = &["frigates"];
+
+const BACKUP_SUBCOMMANDS: &[&str] = &["list", "off", "on"];
 
 const CONVERT_FLAGS: &[&str] = &[
     "--glyphs", "--coords", "--ga", "--voxel", "--ssi", "--planet", "--galaxy",
@@ -109,6 +111,9 @@ impl Completer for CopilotCompleter {
 
             ["fleet"] if trailing_space => ("", FLEET_SUBCOMMANDS.to_vec()),
             ["fleet", _] if !trailing_space => (words[1], FLEET_SUBCOMMANDS.to_vec()),
+
+            ["backup"] if trailing_space => ("", BACKUP_SUBCOMMANDS.to_vec()),
+            ["backup", _] if !trailing_space => (words[1], BACKUP_SUBCOMMANDS.to_vec()),
 
             ["show"] if trailing_space => ("", SHOW_SUBCOMMANDS.to_vec()),
             ["show", _] if !trailing_space => (words[1], SHOW_SUBCOMMANDS.to_vec()),

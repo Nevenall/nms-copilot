@@ -5,6 +5,7 @@
 //! explicit flags are not provided.
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nms_core::address::GalacticAddress;
@@ -13,6 +14,8 @@ use nms_core::galaxy::Galaxy;
 use nms_graph::GalaxyModel;
 use nms_query::base::{Alert, AlertSummary, current_alerts};
 use nms_query::display::{format_alert_indicator, format_alert_line};
+use nms_save::backup::BackupPolicy;
+use nms_save::locate::SaveFile;
 
 /// Current Unix time in seconds.
 pub fn unix_now() -> i64 {
@@ -48,6 +51,15 @@ pub struct SessionState {
 
     /// Alert keys already announced, so a notice prints once per event.
     announced_alerts: HashSet<String>,
+
+    /// Snapshot every save the game writes, when the watcher sees one.
+    pub backup_enabled: bool,
+
+    /// Where snapshots go and how many to keep; `None` until configured.
+    pub backup_policy: Option<BackupPolicy>,
+
+    /// The save the session follows, when it is a game save; `None` for a JSON export.
+    pub save_file: Option<SaveFile>,
 }
 
 /// Where the user's reference position is anchored.
@@ -104,7 +116,22 @@ impl SessionState {
             planet_count: model.planets.len(),
             alerts: Vec::new(),
             announced_alerts: HashSet::new(),
+            backup_enabled: false,
+            backup_policy: None,
+            save_file: None,
         }
+    }
+
+    /// Set up backups for this session: where they go, whether automatic snapshots start on, and which save is followed.
+    pub fn configure_backups(
+        &mut self,
+        policy: BackupPolicy,
+        enabled: bool,
+        save_path: Option<&Path>,
+    ) {
+        self.backup_policy = Some(policy);
+        self.backup_enabled = enabled;
+        self.save_file = save_path.and_then(|p| SaveFile::from_path(p).ok());
     }
 
     /// Recompute base alerts at `now` and return notices for alerts not announced before.
@@ -222,6 +249,14 @@ impl SessionState {
         match self.warp_range {
             Some(r) => lines.push(format!("Warp range:  {} ly", r as u64)),
             None => lines.push("Warp range:  (none)".into()),
+        }
+
+        match &self.backup_policy {
+            Some(policy) if self.backup_enabled => {
+                lines.push(format!("Backups:     on ({})", policy.root.display()))
+            }
+            Some(_) => lines.push("Backups:     off".into()),
+            None => lines.push("Backups:     (not configured)".into()),
         }
 
         if self.alerts.is_empty() {

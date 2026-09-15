@@ -1,23 +1,26 @@
 //! Watch integration for the REPL.
 //!
-//! Drains pending file-watcher deltas between prompts, applies them to the
-//! galaxy model, updates session state, and optionally writes through to the
-//! cache. Notifications are returned as strings for the REPL to print.
+//! Drains pending file-watcher events between prompts: deltas are applied to
+//! the galaxy model and session state, with an optional write-through to the
+//! cache; save writes are snapshotted when automatic backups are on.
+//! Notifications are returned as strings for the REPL to print.
 
 use std::path::Path;
 use std::sync::mpsc;
 
 use nms_core::delta::SaveDelta;
 use nms_graph::GalaxyModel;
+use nms_save::locate::SaveFile;
+use nms_watch::WatchEvent;
 
 use crate::session::{PositionContext, SessionState};
 
-/// Drain all pending deltas from the watcher and apply them to the model.
+/// Drain all pending events from the watcher: apply deltas to the model and snapshot save writes.
 ///
-/// Prints notifications for each delta. If any deltas were applied and
+/// Prints notifications for each delta, and a warning when a snapshot fails. If any deltas were applied and
 /// `cache_path` is provided, writes an updated cache.
 pub fn drain_watch_events(
-    receiver: &mpsc::Receiver<SaveDelta>,
+    receiver: &mpsc::Receiver<WatchEvent>,
     model: &mut GalaxyModel,
     session: &mut SessionState,
     cache_path: Option<&Path>,
@@ -25,12 +28,21 @@ pub fn drain_watch_events(
 ) {
     let mut any_delta = false;
 
-    while let Ok(delta) = receiver.try_recv() {
-        let notifications = apply_and_notify(model, session, &delta);
-        for note in &notifications {
-            println!("{note}");
+    while let Ok(event) = receiver.try_recv() {
+        match event {
+            WatchEvent::Delta(delta) => {
+                let notifications = apply_and_notify(model, session, &delta);
+                for note in &notifications {
+                    println!("{note}");
+                }
+                any_delta = true;
+            }
+            WatchEvent::SaveWritten(file) => {
+                if let Some(warning) = auto_backup(session, &file) {
+                    eprintln!("{warning}");
+                }
+            }
         }
-        any_delta = true;
     }
 
     // Write updated cache if any deltas were applied
@@ -100,6 +112,23 @@ pub fn apply_and_notify(
     }
 
     notes
+}
+
+/// Snapshot a save the watcher saw written, when automatic backups are on.
+///
+/// Successful snapshots are silent; the returned line is a warning for a failed copy.
+pub fn auto_backup(session: &SessionState, file: &SaveFile) -> Option<String> {
+    if !session.backup_enabled {
+        return None;
+    }
+    let policy = session.backup_policy.as_ref()?;
+    match policy.auto_snapshot(file) {
+        Ok(_) => None,
+        Err(e) => Some(format!(
+            "  Warning: backup of {} failed: {e}",
+            file.path().display()
+        )),
+    }
 }
 
 /// Look up the name of the nearest system to an address.
@@ -260,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_drain_watch_events_no_pending() {
-        let (_tx, rx) = mpsc::channel::<SaveDelta>();
+        let (_tx, rx) = mpsc::channel::<WatchEvent>();
         let mut model = test_model();
         let mut session = SessionState::from_model(&model);
 
@@ -287,10 +316,79 @@ mod tests {
             )],
             ..SaveDelta::empty()
         };
-        tx.send(delta).unwrap();
+        tx.send(WatchEvent::Delta(delta)).unwrap();
         drop(tx);
 
         drain_watch_events(&rx, &mut model, &mut session, None, 0);
         assert_eq!(session.system_count, count_before + 1);
+    }
+
+    fn backup_fixture() -> (tempfile::TempDir, SaveFile, nms_save::backup::BackupPolicy) {
+        let dir = tempfile::tempdir().unwrap();
+        let account = dir.path().join("st_1");
+        std::fs::create_dir_all(&account).unwrap();
+        let path = account.join("save.hg");
+        std::fs::write(&path, b"save").unwrap();
+        let file = SaveFile::from_path(&path).unwrap();
+        let policy = nms_save::backup::BackupPolicy {
+            root: dir.path().join("backups"),
+            keep: 20,
+        };
+        (dir, file, policy)
+    }
+
+    #[test]
+    fn test_drain_watch_events_snapshots_save_written_when_backups_on() {
+        let (_dir, file, policy) = backup_fixture();
+        let (tx, rx) = mpsc::channel();
+        let mut model = test_model();
+        let mut session = SessionState::from_model(&model);
+        session.configure_backups(policy.clone(), true, Some(file.path()));
+        tx.send(WatchEvent::SaveWritten(file)).unwrap();
+        drop(tx);
+
+        drain_watch_events(&rx, &mut model, &mut session, None, 0);
+        assert_eq!(
+            nms_save::backup::list(&policy.root, "st_1").unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_drain_watch_events_ignores_save_written_when_backups_off() {
+        let (_dir, file, policy) = backup_fixture();
+        let (tx, rx) = mpsc::channel();
+        let mut model = test_model();
+        let mut session = SessionState::from_model(&model);
+        session.configure_backups(policy.clone(), false, Some(file.path()));
+        tx.send(WatchEvent::SaveWritten(file)).unwrap();
+        drop(tx);
+
+        drain_watch_events(&rx, &mut model, &mut session, None, 0);
+        assert!(
+            nms_save::backup::list(&policy.root, "st_1")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn test_auto_backup_reports_failure() {
+        let (dir, file, _policy) = backup_fixture();
+        let model = test_model();
+        let mut session = SessionState::from_model(&model);
+        let blocked = dir.path().join("blocked");
+        std::fs::write(&blocked, b"not a folder").unwrap();
+        session.configure_backups(
+            nms_save::backup::BackupPolicy {
+                root: blocked,
+                keep: 20,
+            },
+            true,
+            Some(file.path()),
+        );
+        let warning = auto_backup(&session, &file).expect("a warning");
+        assert!(warning.contains("backup of"));
+        assert!(warning.contains("failed"));
     }
 }

@@ -20,6 +20,8 @@ use fabryk_mcp::{
 use tokio::sync::RwLock;
 
 use nms_graph::GalaxyModel;
+use nms_save::backup::BackupPolicy;
+use nms_watch::WatchEvent;
 
 use resources::{BASES_URI, GALAXY_STATS_URI, NmsResources, PLAYER_LOCATION_URI};
 use tools::NmsTools;
@@ -60,6 +62,7 @@ pub fn spawn_mcp_background(
                 model,
                 transport,
                 watcher_rx,
+                None,
                 Some(ready_tx),
                 service_for_thread,
             )
@@ -91,13 +94,16 @@ pub fn run_headless(
     model: Arc<RwLock<GalaxyModel>>,
     transport: Transport,
     save_path: Option<std::path::PathBuf>,
+    backup: Option<BackupPolicy>,
 ) {
     let mcp_service = ServiceHandle::new("mcp");
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         let watcher_rx = start_watcher(save_path.as_deref());
 
-        if let Err(e) = run_mcp_server(model, transport, watcher_rx, None, mcp_service).await {
+        if let Err(e) =
+            run_mcp_server(model, transport, watcher_rx, backup, None, mcp_service).await
+        {
             eprintln!("MCP server error: {e}");
         }
     });
@@ -105,10 +111,10 @@ pub fn run_headless(
 
 /// Start the file watcher if a save path is provided.
 ///
-/// Returns the delta receiver if the watcher started successfully.
+/// Returns the event receiver if the watcher started successfully.
 fn start_watcher(
     save_path: Option<&std::path::Path>,
-) -> Option<std::sync::mpsc::Receiver<nms_core::SaveDelta>> {
+) -> Option<std::sync::mpsc::Receiver<WatchEvent>> {
     let path = save_path?;
     let watch_config = nms_watch::WatchConfig {
         save_path: path.to_path_buf(),
@@ -130,6 +136,8 @@ fn start_watcher(
 ///
 /// If a watcher receiver is provided, starts a background task that applies
 /// deltas to the model and pushes notifications to connected MCP clients.
+/// With a `backup` policy, every save write the watcher reports is snapshotted
+/// too (headless mode only; in REPL mode the REPL's own watcher does that).
 ///
 /// When `ready_tx` is provided (REPL mode), the sender is signalled once
 /// the HTTP listener is bound so the caller can unblock. The `service_handle`
@@ -137,7 +145,8 @@ fn start_watcher(
 async fn run_mcp_server(
     model: Arc<RwLock<GalaxyModel>>,
     transport: Transport,
-    watcher_rx: Option<std::sync::mpsc::Receiver<nms_core::SaveDelta>>,
+    watcher_rx: Option<std::sync::mpsc::Receiver<WatchEvent>>,
+    backup: Option<BackupPolicy>,
     ready_tx: Option<std::sync::mpsc::SyncSender<Result<(), String>>>,
     service_handle: ServiceHandle,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -166,7 +175,7 @@ async fn run_mcp_server(
     if let Some(receiver) = watcher_rx {
         let model_for_watcher = Arc::clone(&model);
         tokio::spawn(async move {
-            apply_deltas_loop(receiver, model_for_watcher, notifier).await;
+            apply_deltas_loop(receiver, model_for_watcher, notifier, backup).await;
         });
     }
 
@@ -274,19 +283,31 @@ mod tests {
     }
 }
 
-/// Background loop: receive deltas from watcher, apply to model, notify clients.
+/// Background loop: receive events from the watcher, apply deltas to the model, notify clients, and snapshot save writes when a backup policy is given.
 async fn apply_deltas_loop(
-    receiver: std::sync::mpsc::Receiver<nms_core::SaveDelta>,
+    receiver: std::sync::mpsc::Receiver<WatchEvent>,
     model: Arc<RwLock<GalaxyModel>>,
     notifier: Notifier,
+    backup: Option<BackupPolicy>,
 ) {
-    // Bridge std::sync::mpsc to tokio::sync::mpsc
+    // Bridge std::sync::mpsc to tokio::sync::mpsc; backups happen on the bridge thread so the copy never blocks the runtime
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
     thread::spawn(move || {
-        while let Ok(delta) = receiver.recv() {
-            if tx.send(delta).is_err() {
-                break;
+        while let Ok(event) = receiver.recv() {
+            match event {
+                WatchEvent::Delta(delta) => {
+                    if tx.send(delta).is_err() {
+                        break;
+                    }
+                }
+                WatchEvent::SaveWritten(file) => {
+                    if let Some(policy) = &backup
+                        && let Err(e) = policy.auto_snapshot(&file)
+                    {
+                        log::warn!("Backup of {} failed: {e}", file.path().display());
+                    }
+                }
             }
         }
     });

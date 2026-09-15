@@ -11,9 +11,13 @@ use crate::layout::side_by_side;
 use crate::route::RouteResult;
 use crate::show::{ShowBaseResult, ShowResult, ShowSystemResult};
 use crate::stats::StatsResult;
-use crate::table::{Builder, build_grouped_table, build_table, nms_theme, nms_theme_no_color};
+use crate::table::{
+    Builder, TableStyleConfig, build_grouped_table, build_table, nms_theme, nms_theme_no_color,
+};
 use crate::theme::Theme;
 use nms_core::fleet::ExpeditionState;
+use nms_save::backup::Snapshot;
+use nms_save::locate::SaveType;
 
 /// Format a distance in light-years for display.
 ///
@@ -1776,5 +1780,106 @@ mod tests {
             assert_eq!(indicator, "\u{1F331} 16 ready \u{00B7} \u{1F4E6} 1 full");
             assert_eq!(format_alert_indicator(&AlertSummary::default()), "");
         }
+    }
+}
+
+// ── Backups ─────────────────────────────────────────────────────
+
+/// Bytes as a short human figure: `779 KB`, `33.6 MB`.
+pub fn format_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    let b = bytes as f64;
+    if b < KB {
+        format!("{bytes} B")
+    } else if b < KB * KB {
+        format!("{:.0} KB", b / KB)
+    } else if b < KB * KB * KB {
+        format!("{:.1} MB", b / (KB * KB))
+    } else {
+        format!("{:.2} GB", b / (KB * KB * KB))
+    }
+}
+
+/// The `backup list` table for one account: when each snapshot was taken, its slot, type, label, and size, newest first.
+pub fn format_backup_list(
+    account: &str,
+    snapshots: &[Snapshot],
+    theme: &TableStyleConfig,
+) -> String {
+    if snapshots.is_empty() {
+        return format!("No backups for {account}.\n");
+    }
+    let mut builder = Builder::default();
+    builder.push_record(["When", "Slot", "Type", "Label", "Size"]);
+    for snapshot in snapshots {
+        let kind = match snapshot.save_type {
+            SaveType::Manual => "manual",
+            SaveType::Auto => "auto",
+        };
+        builder.push_record([
+            snapshot.taken.format("%Y-%m-%d %H:%M:%S").to_string(),
+            snapshot.slot.to_string(),
+            kind.to_string(),
+            snapshot.label.clone().unwrap_or_default(),
+            format_size(snapshot.size),
+        ]);
+    }
+    builder.push_record(["", "", "", "", ""]);
+    let total: u64 = snapshots.iter().map(|s| s.size).sum();
+    let table = build_table(builder, &["BACKUPS", account], theme, "snapshots");
+    format!("{table}{} in all\n", format_size(total))
+}
+
+#[cfg(test)]
+mod backup_tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use std::path::PathBuf;
+
+    fn snapshot(label: Option<&str>, size: u64) -> Snapshot {
+        Snapshot {
+            path: PathBuf::from("/b/st_1/2026-09-14T13-41-36-slot1-manual"),
+            taken: NaiveDate::from_ymd_opt(2026, 9, 14)
+                .unwrap()
+                .and_hms_opt(13, 41, 36)
+                .unwrap(),
+            slot: 1,
+            save_type: SaveType::Manual,
+            label: label.map(str::to_string),
+            size,
+        }
+    }
+
+    #[test]
+    fn test_format_size_steps() {
+        assert_eq!(format_size(512), "512 B");
+        assert_eq!(format_size(797_696), "779 KB");
+        assert_eq!(format_size(35_232_153), "33.6 MB");
+        assert_eq!(format_size(2_500_000_000), "2.33 GB");
+    }
+
+    #[test]
+    fn test_format_backup_list_rows_and_total() {
+        let out = format_backup_list(
+            "st_1",
+            &[snapshot(Some("before-call"), 797_696), snapshot(None, 1024)],
+            &nms_theme_no_color(),
+        );
+        assert!(out.contains("BACKUPS"));
+        assert!(out.contains("st_1"));
+        assert!(out.contains("2026-09-14 13:41:36"));
+        assert!(out.contains("manual"));
+        assert!(out.contains("before-call"));
+        assert!(out.contains("779 KB"));
+        assert!(out.contains("2 snapshots"));
+        assert!(out.ends_with("780 KB in all\n"));
+    }
+
+    #[test]
+    fn test_format_backup_list_empty() {
+        assert_eq!(
+            format_backup_list("st_1", &[], &nms_theme_no_color()),
+            "No backups for st_1.\n"
+        );
     }
 }

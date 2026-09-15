@@ -27,6 +27,9 @@ pub enum LocateError {
     #[error("unsupported platform for NMS save auto-detection")]
     UnsupportedPlatform,
 
+    #[error("not a save file name (expected save.hg or saveN.hg): {0}")]
+    NotASaveFile(PathBuf),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -124,6 +127,27 @@ pub struct SaveFile {
 }
 
 impl SaveFile {
+    /// Describe an existing save file from its path: the slot and type come from the name, the modification time from disk.
+    ///
+    /// # Errors
+    ///
+    /// `NotASaveFile` when the name is not `save.hg` or `saveN.hg`, or an I/O error when the file cannot be read.
+    pub fn from_path(path: &Path) -> Result<Self, LocateError> {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| LocateError::NotASaveFile(path.to_path_buf()))?;
+        let (slot, save_type) = parse_save_filename(name)
+            .ok_or_else(|| LocateError::NotASaveFile(path.to_path_buf()))?;
+        let modified = std::fs::metadata(path)?.modified()?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            slot,
+            save_type,
+            modified,
+        })
+    }
+
     /// Full path to the `.hg` file.
     pub fn path(&self) -> &Path {
         &self.path
@@ -203,7 +227,7 @@ impl SaveSlot {
 /// Parse a save filename into (slot, save_type).
 ///
 /// Returns `None` if the filename doesn't match `save*.hg` or is a metadata file.
-fn parse_save_filename(name: &str) -> Option<(u8, SaveType)> {
+pub fn parse_save_filename(name: &str) -> Option<(u8, SaveType)> {
     if !name.ends_with(".hg") || name.starts_with("mf_") {
         return None;
     }

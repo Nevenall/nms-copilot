@@ -9,6 +9,7 @@
 //!
 //! Also handles metadata verification (`mf_save.hg`) via XXTEA + SHA-256.
 
+pub mod backup;
 pub mod convert;
 pub mod decompress;
 pub mod error;

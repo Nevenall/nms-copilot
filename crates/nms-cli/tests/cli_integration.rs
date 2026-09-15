@@ -689,3 +689,39 @@ fn test_nms_fleet_bad_target_fails() {
         .failure()
         .stderr(predicate::str::contains("expected an expedition number"));
 }
+
+// ---- Backup command tests (no save file needed) ----
+
+#[test]
+fn test_nms_backup_list_empty_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    cargo_bin_cmd!("nms")
+        .args(["backup", "list", "--to"])
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No backups in"));
+}
+
+#[test]
+fn test_nms_backup_prune_empty_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    cargo_bin_cmd!("nms")
+        .args(["backup", "prune", "--keep", "5", "--to"])
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No backups in"));
+}
+
+#[test]
+fn test_nms_backup_help_lists_actions() {
+    cargo_bin_cmd!("nms")
+        .args(["backup", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("list"))
+        .stdout(predicate::str::contains("prune"))
+        .stdout(predicate::str::contains("--label"))
+        .stdout(predicate::str::contains("--all"));
+}

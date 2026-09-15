@@ -174,6 +174,16 @@ pub enum Action {
     /// Open interactive galaxy map.
     Map,
 
+    /// Snapshot the save now, turn automatic snapshots on or off, or list what is kept.
+    Backup {
+        /// "on", "off", or "list"; omit to take a snapshot now.
+        action: Option<String>,
+
+        /// Label for a snapshot taken now; labelled snapshots are never pruned.
+        #[arg(long)]
+        label: Option<String>,
+    },
+
     /// Show current session state.
     Status,
 
@@ -682,5 +692,28 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_parse_backup_forms() {
+        assert!(matches!(
+            parse_line("backup").unwrap().unwrap(),
+            Action::Backup {
+                action: None,
+                label: None
+            }
+        ));
+        assert!(
+            matches!(parse_line("backup on").unwrap().unwrap(), Action::Backup { action: Some(ref a), .. } if a == "on")
+        );
+        assert!(
+            matches!(parse_line("backup list").unwrap().unwrap(), Action::Backup { action: Some(ref a), .. } if a == "list")
+        );
+        let labelled = parse_line("backup --label \"before call\"")
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(labelled, Action::Backup { action: None, label: Some(ref l) } if l == "before call")
+        );
     }
 }

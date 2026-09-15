@@ -2,7 +2,7 @@
 
 Keep copies of the game's save files: on demand from the CLI or REPL, and automatically on every save the game makes while the REPL or MCP server is running.
 
-**Status:** first draft, 2026-09-14. Prompted by the fleet verification work the same day: the game overwrote both files of the slot when an intervention call was answered, and the before-answer save was lost with them.
+**Status:** implemented 2026-09-15 on `feature/save-backups` as `nms backup [--all | --slot N] [--label L] [--to DIR]`, `nms backup list | prune`, the REPL `backup [on | off | list]` command, the `[backup]` config table, and the slot-wide watcher. Drafted 2026-09-14, prompted by the fleet verification work the same day: the game overwrote both files of the slot when an intervention call was answered, and the before-answer save was lost with them. Departures from the design below: `--to DIR` on the CLI stands in for the config file, which the CLI does not read; a labelled snapshot is never treated as a duplicate, so a label can be attached to content already kept; automatic snapshots in headless mode happen on the MCP watcher, while in REPL mode the REPL's own watcher takes them.
 
 **Depends on:** the `locate` module in `nms-save` (accounts, slot pairs, metadata siblings) and the `nms-watch` file watcher. Both exist; the watcher needs one change described below.
 

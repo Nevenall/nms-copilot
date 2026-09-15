@@ -19,6 +19,7 @@ use nms_query::show::{ShowQuery, execute_show};
 use nms_query::stats::{StatsQuery, execute_stats};
 use nms_query::table::{Builder, build_table, nms_theme};
 use nms_query::theme::Theme;
+use nms_save::backup::{self, SnapshotOutcome};
 
 use nms_core::biome::{ALL_BIOME_SUBTYPES, ALL_BIOMES};
 use nms_core::glyph::GLYPH_TABLE;
@@ -115,6 +116,10 @@ pub fn dispatch(
         Action::Set { target } => dispatch_set(model, session, target),
         Action::Reset { target } => Ok(dispatch_reset(model, session, target)),
         Action::Status => Ok(session.format_status()),
+
+        Action::Backup { action, label } => {
+            dispatch_backup(session, action.as_deref(), label.as_deref())
+        }
 
         Action::Info => {
             let systems = model.systems.len();
@@ -592,6 +597,58 @@ fn dispatch_fleet(model: &GalaxyModel, target: Option<&str>) -> Result<String, S
     format_fleet(&status, target, &Theme::default_dark())
 }
 
+/// `backup` / `backup on|off` / `backup list`, with `--label` for a snapshot taken now.
+fn dispatch_backup(
+    session: &mut SessionState,
+    action: Option<&str>,
+    label: Option<&str>,
+) -> Result<String, String> {
+    let policy = session
+        .backup_policy
+        .clone()
+        .ok_or("Backups are not configured for this session.")?;
+    let followed = || {
+        session
+            .save_file
+            .as_ref()
+            .ok_or("Backups need a save.hg file in the game's folder; this session follows something else.")
+    };
+    match action {
+        None => match backup::snapshot(followed()?, &policy.root, label)
+            .map_err(|e| e.to_string())?
+        {
+            SnapshotOutcome::Taken(s) => Ok(format!("Snapshot saved to {}\n", s.path.display())),
+            SnapshotOutcome::Unchanged(s) => Ok(format!(
+                "Save unchanged since {}; nothing copied.\n",
+                s.folder_name()
+            )),
+        },
+        Some("on") => {
+            session.backup_enabled = true;
+            Ok(format!(
+                "Automatic snapshots on ({}).\n",
+                policy.root.display()
+            ))
+        }
+        Some("off") => {
+            session.backup_enabled = false;
+            Ok("Automatic snapshots off.\n".into())
+        }
+        Some("list") => {
+            let account = backup::account_name(followed()?.path()).map_err(|e| e.to_string())?;
+            let snapshots = backup::list(&policy.root, &account).map_err(|e| e.to_string())?;
+            Ok(nms_query::display::format_backup_list(
+                &account,
+                &snapshots,
+                &nms_theme(),
+            ))
+        }
+        Some(other) => Err(format!(
+            "Unknown backup action \"{other}\". Use on, off, or list, or omit it to snapshot now."
+        )),
+    }
+}
+
 fn base_type_label(bt: &BaseType) -> &'static str {
     match bt {
         BaseType::HomePlanetBase => "home",
@@ -657,6 +714,7 @@ Commands:
   show       Show system or base details
   base       Show crops, extraction networks, and power at your bases
   fleet      Show frigate expeditions, the Navigator's offers, and the fleet
+  backup     Snapshot the save now; backup on | off | list
   stats      Display aggregate galaxy statistics
   convert    Convert between coordinate formats
   set        Set session context (position, biome, warp-range)
@@ -679,6 +737,8 @@ Examples:
   fleet
   fleet 1
   fleet frigates
+  backup --label before-call
+  backup on
   stats --biomes
   convert --glyphs 01717D8A4EA2
   set biome Lush

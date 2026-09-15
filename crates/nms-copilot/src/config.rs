@@ -9,6 +9,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use nms_save::backup::BackupPolicy;
 use serde::Deserialize;
 
 use crate::paths;
@@ -34,6 +35,9 @@ pub struct Config {
 
     /// MCP server settings.
     pub mcp: McpConfig,
+
+    /// Save backup settings.
+    pub backup: BackupConfig,
 }
 
 /// Save file location and format.
@@ -188,6 +192,42 @@ impl Default for McpConfig {
     }
 }
 
+/// Save backup settings.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct BackupConfig {
+    /// Snapshot every save the game writes while the watcher runs (default: false).
+    pub enabled: bool,
+
+    /// Where snapshots go (default: `~/.nms-copilot/backups`). A leading `~` is the home directory.
+    pub dir: Option<PathBuf>,
+
+    /// Unlabelled snapshots kept per slot; 0 keeps everything (default: 20).
+    pub keep: usize,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            dir: None,
+            keep: 20,
+        }
+    }
+}
+
+/// Replace a leading `~` component with the home directory.
+fn expand_home(path: &Path) -> PathBuf {
+    let mut components = path.components();
+    match components.next() {
+        Some(std::path::Component::Normal(first)) if first == "~" => match dirs::home_dir() {
+            Some(home) => home.join(components.as_path()),
+            None => path.to_path_buf(),
+        },
+        _ => path.to_path_buf(),
+    }
+}
+
 impl Config {
     /// Load config from the default path (`~/.nms-copilot/config.toml`).
     ///
@@ -309,6 +349,25 @@ impl Config {
     /// The configured MCP HTTP bind address.
     pub fn mcp_http_addr(&self) -> SocketAddr {
         SocketAddr::new(self.mcp.host, self.mcp.port)
+    }
+
+    /// Whether automatic snapshots start on.
+    pub fn backup_enabled(&self) -> bool {
+        self.backup.enabled
+    }
+
+    /// Where snapshots go and how many unlabelled ones to keep per slot.
+    pub fn backup_policy(&self) -> BackupPolicy {
+        let root = self
+            .backup
+            .dir
+            .as_deref()
+            .map(expand_home)
+            .unwrap_or_else(paths::backup_dir);
+        BackupPolicy {
+            root,
+            keep: self.backup.keep,
+        }
     }
 }
 
@@ -625,6 +684,41 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.watch_enabled());
         assert_eq!(config.watch_debounce(), Duration::from_millis(250));
+    }
+
+    #[test]
+    fn test_backup_config_defaults() {
+        let config = Config::default();
+        assert!(!config.backup_enabled());
+        let policy = config.backup_policy();
+        assert_eq!(policy.root, paths::backup_dir());
+        assert_eq!(policy.keep, 20);
+    }
+
+    #[test]
+    fn test_backup_config_from_toml() {
+        let toml = r#"
+            [backup]
+            enabled = true
+            dir = "/var/nms/backups"
+            keep = 0
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.backup_enabled());
+        let policy = config.backup_policy();
+        assert_eq!(policy.root, PathBuf::from("/var/nms/backups"));
+        assert_eq!(policy.keep, 0);
+    }
+
+    #[test]
+    fn test_backup_dir_tilde_expands_to_home() {
+        let toml = r#"
+            [backup]
+            dir = "~/nms-backups"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let expected = dirs::home_dir().unwrap().join("nms-backups");
+        assert_eq!(config.backup_policy().root, expected);
     }
 
     #[test]

@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process;
 
+mod backup;
 mod base;
 mod completions;
 mod convert;
@@ -292,6 +293,37 @@ enum Commands {
 
     /// List all save slots.
     Saves,
+
+    /// Copy save files into dated backup folders, list what is kept, or prune old snapshots.
+    Backup {
+        /// Snapshot every file of every slot instead of the most recent save.
+        #[arg(long)]
+        all: bool,
+
+        /// Label for the snapshot folder; labelled snapshots are never pruned.
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Backup folder (default: ~/.nms-copilot/backups).
+        #[arg(long, global = true, value_name = "DIR")]
+        to: Option<PathBuf>,
+
+        #[command(subcommand)]
+        action: Option<BackupCmd>,
+    },
+}
+
+#[derive(Subcommand)]
+enum BackupCmd {
+    /// List kept snapshots, newest first.
+    List,
+
+    /// Delete all but the newest N unlabelled snapshots of each slot.
+    Prune {
+        /// Snapshots to keep per slot; 0 keeps everything.
+        #[arg(long, default_value = "20")]
+        keep: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -524,6 +556,25 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Completions { shell } => completions::run(shell),
         Commands::Saves => saves::run(),
+        Commands::Backup {
+            all,
+            label,
+            to,
+            action,
+        } => match action {
+            None => {
+                let target = if all {
+                    backup::Target::All
+                } else if let Some(n) = slot {
+                    backup::Target::Slot(n)
+                } else {
+                    backup::Target::MostRecent
+                };
+                backup::run_snapshot(target, label.as_deref(), to)
+            }
+            Some(BackupCmd::List) => backup::run_list(slot, to),
+            Some(BackupCmd::Prune { keep }) => backup::run_prune(keep, to),
+        },
     }
 }
 

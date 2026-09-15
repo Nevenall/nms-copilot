@@ -19,6 +19,11 @@ pub fn config_path() -> PathBuf {
     data_dir().join("config.toml")
 }
 
+/// Default backup folder: `~/.nms-copilot/backups`.
+pub fn backup_dir() -> PathBuf {
+    data_dir().join("backups")
+}
+
 /// Default cache path (legacy): `~/.nms-copilot/galaxy.rkyv`.
 pub fn cache_path() -> PathBuf {
     data_dir().join("galaxy.rkyv")
@@ -54,6 +59,11 @@ pub fn ensure_data_dir() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_backup_dir_under_data_dir() {
+        assert_eq!(backup_dir(), data_dir().join("backups"));
+    }
 
     #[test]
     fn test_data_dir_ends_with_nms_copilot() {

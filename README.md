@@ -210,6 +210,31 @@ nms info --slot 3                   # use save slot 3 instead of most recent
 nms find --slot 5 --biome Lush      # search slot 5's discoveries
 ```
 
+### Save Backups
+
+`nms backup` copies a save file and its `mf_` metadata sibling into a dated folder under `~/.nms-copilot/backups/<account>/`, keeping the original file names so a restore is a two-file copy. The folder name carries the save's own modification time, the slot, whether it was a manual or auto save, and any label. An unlabelled snapshot whose content matches the newest one kept is skipped.
+
+```bash
+nms backup                            # snapshot the most recent save of the most recent slot
+nms backup --slot 3                   # a specific slot, its most recent file
+nms backup --all                      # every file of every slot
+nms backup --label before-call        # label the folder; labelled snapshots are never pruned
+nms backup list                       # what is kept, newest first, with sizes and labels
+nms backup prune --keep 10            # drop all but the newest 10 unlabelled snapshots per slot
+nms backup --to D:/nms-backups        # any of the above against another folder
+```
+
+The REPL and the headless MCP server can snapshot automatically on every save the game writes, once turned on in the config or with `backup on` in the REPL. The watcher follows both files of a slot, so manual and auto saves are both caught.
+
+```toml
+[backup]
+enabled = false                       # automatic snapshots while the watcher runs
+dir = "~/.nms-copilot/backups"        # where snapshots go
+keep = 20                             # unlabelled snapshots kept per slot; 0 keeps everything
+```
+
+Restore is manual, and the tool never writes into the game's folder. With the game closed, copy the two files from a snapshot folder back over the same names in the account folder (for example `%APPDATA%\HelloGames\NMS\st_<id>\` on Windows), then start the game and load the slot.
+
 ### Interactive REPL
 
 The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map. It also watches your bases and your fleet: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full · 🚀 1 waiting` while crops are ready to harvest, an extraction network is full, a frigate is waiting for your decision, or an expedition has returned, and a notice prints once when any of those happens. New Navigator offers after the 00:00 UTC reset are announced the same way.
@@ -246,6 +271,8 @@ REPL-only commands:
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
 | `status` | Show current session state and base and fleet alerts |
 | `fleet [N\|frigates]` | Frigate expeditions, one expedition in full, or every frigate |
+| `backup [--label L]` | Snapshot the save now |
+| `backup on\|off\|list` | Automatic snapshots for this session, or what is kept |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
 
 ---

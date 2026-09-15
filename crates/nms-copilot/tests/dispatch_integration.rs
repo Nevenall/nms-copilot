@@ -135,3 +135,105 @@ fn dispatch_set_position_to_base() {
     let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
     assert!(output.contains("Test Base"));
 }
+
+mod backup {
+    use super::setup;
+    use nms_copilot::commands::parse_line;
+    use nms_copilot::dispatch::dispatch;
+    use nms_save::backup::{BackupPolicy, list};
+
+    fn run(
+        line: &str,
+        model: &nms_graph::GalaxyModel,
+        session: &mut nms_copilot::session::SessionState,
+    ) -> Result<String, String> {
+        let action = parse_line(line).unwrap().unwrap();
+        dispatch(&action, model, session)
+    }
+
+    #[test]
+    fn test_backup_without_configuration_is_an_error() {
+        let (model, mut session) = setup();
+        let err = run("backup", &model, &mut session).unwrap_err();
+        assert!(err.contains("not configured"));
+    }
+
+    #[test]
+    fn test_backup_on_off_and_status() {
+        let (model, mut session) = setup();
+        let dir = tempfile::tempdir().unwrap();
+        session.configure_backups(
+            BackupPolicy {
+                root: dir.path().to_path_buf(),
+                keep: 20,
+            },
+            false,
+            None,
+        );
+        assert!(session.format_status().contains("Backups:     off"));
+        let out = run("backup on", &model, &mut session).unwrap();
+        assert!(out.contains("on"));
+        assert!(session.backup_enabled);
+        assert!(session.format_status().contains("Backups:     on"));
+        let out = run("backup off", &model, &mut session).unwrap();
+        assert!(out.contains("off"));
+        assert!(!session.backup_enabled);
+        let err = run("backup sideways", &model, &mut session).unwrap_err();
+        assert!(err.contains("sideways"));
+    }
+
+    #[test]
+    fn test_backup_snapshot_and_list_follow_the_save() {
+        let (model, mut session) = setup();
+        let dir = tempfile::tempdir().unwrap();
+        let account = dir.path().join("st_9");
+        std::fs::create_dir_all(&account).unwrap();
+        let save = account.join("save4.hg");
+        std::fs::write(&save, b"save bytes").unwrap();
+        let root = dir.path().join("backups");
+        session.configure_backups(
+            BackupPolicy {
+                root: root.clone(),
+                keep: 20,
+            },
+            false,
+            Some(&save),
+        );
+
+        let out = run("backup list", &model, &mut session).unwrap();
+        assert_eq!(out, "No backups for st_9.\n");
+
+        let out = run("backup --label first", &model, &mut session).unwrap();
+        assert!(out.starts_with("Snapshot saved to "));
+        let kept = list(&root, "st_9").unwrap();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].slot, 2);
+        assert_eq!(kept[0].label.as_deref(), Some("first"));
+
+        let out = run("backup", &model, &mut session).unwrap();
+        assert!(out.contains("nothing copied"));
+
+        let out = run("backup list", &model, &mut session).unwrap();
+        assert!(out.contains("BACKUPS"));
+        assert!(out.contains("first"));
+        assert!(out.contains("1 snapshots"));
+    }
+
+    #[test]
+    fn test_backup_snapshot_needs_a_game_save() {
+        let (model, mut session) = setup();
+        let dir = tempfile::tempdir().unwrap();
+        let export = dir.path().join("export.json");
+        std::fs::write(&export, b"{}").unwrap();
+        session.configure_backups(
+            BackupPolicy {
+                root: dir.path().join("b"),
+                keep: 20,
+            },
+            true,
+            Some(&export),
+        );
+        let err = run("backup", &model, &mut session).unwrap_err();
+        assert!(err.contains("save.hg"));
+    }
+}

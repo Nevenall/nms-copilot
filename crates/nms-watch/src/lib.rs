@@ -13,4 +13,4 @@ pub use delta::compute_delta;
 pub use error::WatchError;
 pub use nms_core::delta::{PlayerMoved, SaveDelta};
 pub use snapshot::SaveSnapshot;
-pub use watcher::{WatchConfig, WatchHandle, start_watching};
+pub use watcher::{WatchConfig, WatchEvent, WatchHandle, start_watching};

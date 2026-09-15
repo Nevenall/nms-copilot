@@ -148,7 +148,8 @@ fn main() {
             model.blocking_read().planet_count(),
             model.blocking_read().bases.len(),
         );
-        mcp::run_headless(model, transport, save_path);
+        let backup = config.backup_enabled().then(|| config.backup_policy());
+        mcp::run_headless(model, transport, save_path, backup);
         return;
     }
 
@@ -199,7 +200,7 @@ fn main() {
     mcp::spawn_mcp_background(
         Arc::clone(&model),
         mcp::Transport::Http(mcp_addr),
-        save_path,
+        save_path.clone(),
     );
     let mcp_base = format!("http://{mcp_addr}");
     eprintln!("MCP server listening on {mcp_base}");
@@ -213,6 +214,17 @@ fn main() {
     let mut session = SessionState::from_model(&model.blocking_read());
     if let Some(warp_range) = config.defaults.warp_range {
         session.set_warp_range(warp_range);
+    }
+    session.configure_backups(
+        config.backup_policy(),
+        config.backup_enabled(),
+        save_path.as_deref(),
+    );
+    if session.backup_enabled && watch_handle.is_some() {
+        println!(
+            "Automatic snapshots on: {}\n",
+            config.backup_policy().root.display()
+        );
     }
     // Seed the alert state and print one summary line instead of a notice per alert.
     session.refresh_alerts(&model.blocking_read(), unix_now());
