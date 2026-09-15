@@ -4,7 +4,7 @@
 
 Project 01 delivered the galactic atlas: systems, planets, routes, and the three interfaces that share one live model. Project 02 turns the same pipeline toward the player's holdings. The save file carries every inventory grid, every owned ship and vehicle, and every object placed at every base, and almost none of it is surfaced today.
 
-Two arcs, each with its own plan document:
+Three arcs, each with its own plan document:
 
 | Arc | Doc | Question it answers |
 |-----|-----|---------------------|
@@ -16,12 +16,13 @@ The arcs were scoped against a real save on 2026-09-12 to 2026-09-14. Every fiel
 
 ## Shared groundwork
 
-Both arcs need pieces that do not exist yet. Build them once, in this order:
+The arcs share pieces that are built once. Two are done; the rest are arc 01's first steps:
 
-1. **Item name table.** Inventory slots, refiner buffers, and crop yields are all keyed by the game's internal item IDs (`^ASTEROID2` is Gold). The save contains no display names. A bundled ID-to-name table in `nms-core`, with the raw ID as fallback, unblocks every listing in both arcs. Sources and licensing are discussed in 0044.
+1. **Item name table.** Inventory slots, refiner buffers, and crop yields are all keyed by the game's internal item IDs (`^ASTEROID2` is Gold). The save contains no display names. A bundled ID-to-name table in `nms-core`, generated from the AssistantNMS API by internal ID with the raw ID as fallback, unblocks every listing. Sources are discussed in 0044 and ranked in [docs/reference/nms-game-notes.md](../../reference/nms-game-notes.md).
 2. **Typed base objects.** Done in arc 02: `PersistentPlayerBases[].Objects[]` is parsed into `nms_core::BaseObjects` and stored on each `PlayerBase`. Arc 01 can use it to say which base a storage container is reachable from.
-3. **Model and cache growth.** The rkyv cache now carries base objects and starts with a magic header and format version, so a cache written by an older binary is rebuilt rather than misread. Arc 01 still needs new model and cache sections for holdings.
+3. **Model and cache growth.** Done in arcs 02 and 03: the rkyv cache carries base objects and the fleet and starts with a magic header and `CACHE_FORMAT_VERSION`, so a cache written by an older binary is rebuilt rather than misread; the watcher's delta replaces the fleet whole when it changed. Arc 01 adds a holdings section to the model, the cache, and the delta the same way, and bumps the version.
+4. **Ship bases.** The save's `PersistentBaseTypes` includes `PlayerShipBase` (the corvette), which `nms_core::BaseType` does not have; the converter folds it into `ExternalPlanetBase`. Arc 01 adds the variant before deriving storage access points from bases, so a container on the corvette is labelled as such.
 
 ## Status
 
-Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool. Arc 03 is implemented (2026-09-15) as the `fleet` command, REPL alerts, and the `fleet_status` MCP tool; both plans record the verified decode rules. Arc 01 is a first draft, not started.
+Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool. Arc 03 is implemented (2026-09-15) as the `fleet` command, REPL alerts, and the `fleet_status` MCP tool; both plans record the verified decode rules. Arc 01 was drafted 2026-09-14 and revised 2026-09-15 against the code and a fresh read of the save; not started.

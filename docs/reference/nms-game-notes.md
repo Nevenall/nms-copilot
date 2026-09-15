@@ -108,7 +108,8 @@ The Wonders catalogue has seven categories plus personal records. The save store
 | `^OXYGEN` | Oxygen | `[community: refiner recipe gist]` |
 | `^GAS1`, `^GAS2`, `^GAS3` | Sulphurine, Radon, Nitrogen | `[community: refiner recipe gist]` |
 
-- The save carries no display names; a full ID-to-name table is planned (arc 01). A public refiner-recipe gist keys about 90 substances by ID, and the wiki's Item Id List covers products and technology. `[community]`
+- The save carries no display names; a full ID-to-name table is planned (arc 01), generated from the AssistantNMS API above by internal ID, with a public refiner-recipe gist (about 90 substances) and the wiki's Item Id List (products and technology) as fallbacks. `[game-data: the API resolves `ASTEROID2`, `U_GENERATOR_S`, and `FRE_ROOM_FLEET` by ID; the gist and wiki are `community`]`
+- Corvette parts are products whose IDs start with `^B_` (`^B_CON_5`, `^B_WNG_G`, `^B_STR_A_N`, `^B_HAB_B`); they live in `CorvetteStorageInventory`, not in a general grid. `[inferred: from the IDs and the key name on the sample, 2026-09-15; resolve a few through the API to confirm]`
 - Ship archetypes by the folder in `Resource.Filename`: `FIGHTERS` fighter, `DROPSHIPS` hauler, `SCIENTIFIC` explorer, `SAILSHIP` solar, `S-CLASS` exotic, `BIGGS` living ship. `[community: folder names as read by save editors; not yet checked against the in-game ship list]`
 - The ten numbered storage containers are one shared inventory each, reachable from any base or freighter room with the matching number. `[community: wiki; matches play]`
 
