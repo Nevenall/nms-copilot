@@ -4,8 +4,8 @@ Facts about No Man's Sky save files and game mechanics that the code depends on,
 
 | Document | Covers |
 |----------|--------|
-| [nms-save-notes.md](nms-save-notes.md) | the save file: container, key obfuscation, top-level layout, addresses, bases and base objects, fleet, inventory; what is decoded, what is not |
-| [nms-game-notes.md](nms-game-notes.md) | the game: object and item IDs, growth times, capacities, power, fleet rules, coordinate systems, where to look things up |
+| [nms-save-notes.md](nms-save-notes.md) | the save file: container, key obfuscation, top-level layout, addresses, bases and base objects, fleet, inventory, wonders; what is decoded, what is not |
+| [nms-game-notes.md](nms-game-notes.md) | the game: object and item IDs, growth times, capacities, power, fleet rules, wonders categories, coordinate systems, where to look things up |
 
 ## Evidence tags
 

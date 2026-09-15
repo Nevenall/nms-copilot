@@ -56,7 +56,7 @@ Each event:
 
 **Waiting for the player.** When `InterventionPhoneCallActivated` is true and `Events[NextEventToTrigger].IsInterventionEvent` is true, the fleet is holding for a decision, the state the game labels "waiting for player". `PauseTime` is the moment that hold began and is 0 otherwise. Answering the call zeroes it and shifts `StartTime` forward by the length of the hold, so active time is always `(PauseTime or now) − StartTime` (verified 2026-09-14, see the reference notes). An answered intervention event keeps `Success` false, so resolved means `index < NextEventToTrigger`.
 
-**Time remaining is not stored.** Only the duration class is. Community figures put Short at about an hour, Medium at four to five, Long at 21 to 24, and Very Long at up to 28, growing with fleet size and shrinking with a Fuel Oxidiser. The one measured run implies a total of 59,272 seconds (16h 28m) for Very Long with five frigates at speed 1.0. A per-run estimate comes from the run itself: resolved events divided by active time give the cadence. On the sample, 16 events in 52,417 seconds is 55 minutes per event, and that predicted the game's post-answer figure within five minutes while two events remained, but the final leg proved longer than a mid-route event. The tool shows the estimate as "about" and never as a countdown; once more runs pin the totals per duration class, a class table can replace the cadence.
+**Time remaining is not stored, and neither is the route.** The game's duration is the offer's distance at about 284 light years per hour, times the fleet's `SpeedMultiplier` (verified 2026-09-14, see the game notes), but the distance is only shown on the Navigator screen and the event locations are zero until reached, so the tool cannot compute the total. What it has is the run's own cadence: resolved events divided by active time. On the first sample, 16 events in 52,417 seconds was 55 minutes per event and predicted the game's figure within five minutes with two events left, though the final leg ran longer than a mid-route event. Both Very Long runs seen had 18 events and totals near 16.5 hours, so a per-class table for this fleet is a fallback once more runs are seen. The tool shows the estimate as "about" and never as a countdown.
 
 ### The fleet: `PlayerStateData.FleetFrigates[]`
 
@@ -87,13 +87,13 @@ next_refresh   = (LastKnownDay + 1) * 86400            // 00:00 UTC after the re
 new_available  = now >= next_refresh                    // the game will roll a fresh set when next checked
 ```
 
-What it can only partly say is how many of today's five are still unused. A running expedition whose seed is in the list accounts for one. An expedition launched and already debriefed today would be gone from `FleetExpeditions`, so the count "5 minus running today" is an upper bound. The plan shows it as "up to N unused today".
+The day rolls on game load: `LastKnownDay` moves to the new day and `ExpeditionSeedsSelectedToday` is cleared, and the five seeds appear once the Navigator is used (verified 2026-09-14, see the reference notes). So an empty list with the day current means all five offers are untouched. Once the list is filled, a running expedition whose seed is in it accounts for one, but an expedition launched and already debriefed today would be gone from `FleetExpeditions`, so "5 minus running today" is an upper bound. Verified later the same day: the list holds the seeds of expeditions launched today, so `5 − len` is exact and the tool shows "N of today's 5 offers left".
 
 Capacity is exact: Fleet Command Rooms are `^FRE_ROOM_FLEET` objects at the freighter base (7 on the sample), one running expedition per room; frigates at home are those not assigned anywhere (20 of 25 on the sample).
 
 ### Not in the save, or not understood
 
-- Nothing marks an expedition as finished-but-undebriefed. The likely shape is `NextEventToTrigger == Events.len()` with the fleet's `UA` back at the freighter, but the sample has no such expedition. Until one is seen, "finished" is reported when every event is resolved, and the alert wording stays cautious.
+- A finished, undebriefed expedition stays in the list with `NextEventToTrigger == Events.len()` and `UA` 0 (verified 2026-09-14). "Finished, awaiting debrief" is reported on that shape.
 - `FreighterFleet[8]` holds eight entries with empty inventories and no home seed. Not fleet frigates; left alone.
 - Event rewards are only described (`^VALUE_UNITS`), not quantified.
 - `TimeOfLastIncomeCollection` on frigates is years old on every entry and does not change with expeditions.
@@ -188,19 +188,21 @@ In-game checks against the sample save:
 
 1. ~~Open the Fleet Command Room while the call is pending and note the remaining time; save; wait; save again.~~ Done 2026-09-14 from the save side: the room goes straight to the call, but no timing field moved in six hours of holding, and answering shifted `StartTime` by exactly the hold. The expedition pauses and `PauseTime` marks its start.
 2. ~~Answer the call, then compare the resumed remaining time with the cadence estimate.~~ Done 2026-09-14: game showed 1h 54m 15s, cadence said 1h 50m for the two events outstanding. Expected finish Unix 1789425510; compare when it lands.
-3. Let the expedition finish without debriefing, save, and read the expedition's shape.
-4. After 00:00 UTC, save before talking to the Navigator and check whether `LastKnownDay` and the seeds change on load or only on talking to the Navigator.
-5. Open one frigate's details and confirm the order of the stats against `Stats[0..6]`.
+3. ~~Let the expedition finish without debriefing, save, and read the expedition's shape.~~ Done 2026-09-14: all events resolved, `UA` 0, entry still present; the debrief then removed it and left the seed list empty.
+4. ~~After 00:00 UTC, save before talking to the Navigator.~~ Done 2026-09-14: the day rolled and the seed list emptied on load. Still to see: the seeds appearing after the Navigator is used.
+5. ~~Open one frigate's details and confirm the order of the stats against `Stats[0..6]`.~~ Done 2026-09-14: Combat, Exploration, Industrial, Trade confirmed; `Stats[4]` is not the fuel figure and stays open.
+6. ~~Launch one expedition, save, and check whether `ExpeditionSeedsSelectedToday` gains its seed.~~ Done 2026-09-14: it did. The list records launches and the offers-remaining count is exact.
+7. ~~Read the new run's remaining time from the Fleet Command Room right after launch and compare with the Navigator's 16h 34m and the 0.97 speed multiplier.~~ Done 2026-09-14: 15h 58m 5s at 386 s after launch, matching 16h 34m × 0.97 within 20 s.
 
 ---
 
 ## Open questions
 
 1. ~~What exactly does `PauseTime` mark, and is it reset when the call is answered?~~ Answered: the hold's start; reset to 0 and `StartTime` shifted forward by the hold length.
-2. How is a completed, undebriefed expedition represented, and does debriefing remove it from `FleetExpeditions`?
-3. Does `LastKnownDay` roll on game load or only when the Navigator is used?
-4. What do `Stats[4]` and `Stats[6..11]` hold?
+2. ~~How is a completed, undebriefed expedition represented, and does debriefing remove it from `FleetExpeditions`?~~ Answered: all events resolved with `UA` 0; the debrief removes it.
+3. ~~Does `LastKnownDay` roll on game load or only when the Navigator is used?~~ Answered: on load, and the seed list empties with it.
+4. What does `Stats[4]` hold? It is not the fuel figure (10 against 7 tonnes on the screen). `Stats[6..11]` are zero everywhere.
 5. What is `FreighterFleet[8]`?
 6. What is `TimeOfLastIncomeCollection`?
-7. Which consumable sets `SpeedMultiplier`, and to what?
-8. Why did `NumberOfFailedEventsThisExpedition` rise from 0 to 2 when one intervention event was answered? The call asked for credits to fund an investment and the player paid; the result was not shown at the time, so the debrief may explain it.
+7. ~~Which consumable sets `SpeedMultiplier`, and to what?~~ Answered in part: the assigned frigates' `^SPEED_*` traits set it (0.97 with two aboard); consumables untested.
+8. ~~Why did `NumberOfFailedEventsThisExpedition` rise from 0 to 2 when one intervention event was answered?~~ Answered: the debrief listed two failures for that one event, the event going wrong and the funded investment being lost, so an intervention counts its event outcome and its intervention outcome separately. Show the counters for totals and the flags per event.
