@@ -58,12 +58,16 @@ pub fn compute_delta(old: &SaveSnapshot, new: &SaveSnapshot) -> SaveDelta {
         .map(|(_, base)| base.clone())
         .collect();
 
+    // 6. The fleet is replaced whole when anything about it changed
+    let fleet = (old.fleet != new.fleet).then(|| new.fleet.clone());
+
     SaveDelta {
         new_systems,
         new_planets,
         player_moved,
         new_bases,
         modified_bases,
+        fleet,
     }
 }
 
@@ -212,6 +216,18 @@ mod tests {
         assert_eq!(delta.modified_bases.len(), 1);
         // Not a new base, so new_bases should be empty
         assert!(delta.new_bases.is_empty());
+    }
+
+    #[test]
+    fn test_delta_detects_fleet_change() {
+        let old = test_snapshot();
+        let mut new = test_snapshot();
+        new.fleet.offer_day = 20711;
+        new.fleet.command_rooms = 3;
+        let delta = compute_delta(&old, &new);
+        assert_eq!(delta.fleet.as_ref().map(|f| f.offer_day), Some(20711));
+        assert_eq!(delta.change_count(), 1);
+        assert!(compute_delta(&new, &new).fleet.is_none());
     }
 
     #[test]

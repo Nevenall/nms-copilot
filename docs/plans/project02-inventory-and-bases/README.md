@@ -24,4 +24,4 @@ Both arcs need pieces that do not exist yet. Build them once, in this order:
 
 ## Status
 
-Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool; its plan records the verified decode rules. Arc 01 and arc 03 are first drafts, not started.
+Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool. Arc 03 is implemented (2026-09-15) as the `fleet` command, REPL alerts, and the `fleet_status` MCP tool; both plans record the verified decode rules. Arc 01 is a first draft, not started.

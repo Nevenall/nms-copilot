@@ -91,9 +91,9 @@ fn test_pipeline_multi_system_model_has_expected_planet_count() {
 }
 
 #[test]
-fn test_pipeline_multi_system_model_has_two_bases() {
+fn test_pipeline_multi_system_model_has_three_bases() {
     let model = model_from_fixture("multi_system_save.json");
-    assert_eq!(model.base_count(), 2);
+    assert_eq!(model.base_count(), 3);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn test_pipeline_stats_counts_match_model() {
     let result = execute_stats(&model, &query);
     assert_eq!(result.system_count, 6);
     assert_eq!(result.planet_count, 13);
-    assert_eq!(result.base_count, 2);
+    assert_eq!(result.base_count, 3);
 }
 
 #[test]

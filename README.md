@@ -142,6 +142,9 @@ nms show base "Acadia National Park"  # base details with portal glyphs
 nms base                              # every base: crops ready, extraction fill, power
 nms base "Farm"                       # one base: crops by type, extraction by pipe network, power
 nms base "Farm" --width 160           # lay the sections out side by side at this width (default: terminal width)
+nms fleet                             # frigate expeditions: waiting for you, returned, or under way; the Navigator's offers left
+nms fleet 1                           # one expedition: its frigates and the event log
+nms fleet frigates                    # every frigate: class, grade, stats, modules, and whether it is out
 nms stats --biomes                    # biome distribution table
 nms stats --discoveries               # discovery counts by type
 nms saves                             # list all save slots
@@ -209,7 +212,7 @@ nms find --slot 5 --biome Lush      # search slot 5's discoveries
 
 ### Interactive REPL
 
-The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map. It also watches your bases: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full` while crops are ready to harvest or an extraction network is full, and a notice prints once when either happens.
+The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map. It also watches your bases and your fleet: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full · 🚀 1 waiting` while crops are ready to harvest, an extraction network is full, a frigate is waiting for your decision, or an expedition has returned, and a notice prints once when any of those happens. New Navigator offers after the 00:00 UTC reset are announced the same way.
 
 ```bash
 nms-copilot
@@ -241,7 +244,8 @@ REPL-only commands:
 | `set biome <biome>` | Set default biome filter for find/route |
 | `set warp-range <ly>` | Set default warp range for route planning |
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
-| `status` | Show current session state and base alerts |
+| `status` | Show current session state and base and fleet alerts |
+| `fleet [N\|frigates]` | Frigate expeditions, one expedition in full, or every frigate |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
 
 ---
@@ -295,7 +299,7 @@ nms-copilot --headless                           # stdio transport
 nms-copilot --headless --http 127.0.0.1:3000    # HTTP transport
 ```
 
-The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, and check which crops are ready and how full your supply depots are (`base_status`).
+The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), and see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`).
 
 ---
 

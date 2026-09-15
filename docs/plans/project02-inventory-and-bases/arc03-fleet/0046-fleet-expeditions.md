@@ -2,7 +2,7 @@
 
 Report on frigate fleet expeditions: what each running expedition is doing, whether a frigate is waiting for the player, roughly when it will finish, and when the Navigator will offer new expeditions.
 
-**Status:** first draft, 2026-09-14. Scoped against a real save with one running expedition (Diplomacy, Very Long, five frigates, 16 of 18 events resolved, an intervention call pending) and a fleet of 25 frigates. Every field quoted below was read from that save unless marked as inferred or from community sources.
+**Status:** implemented 2026-09-15 as `nms fleet [N | frigates]`, the REPL `fleet` command and alerts, and the `fleet_status` MCP tool. Drafted 2026-09-14 against a real save with one running expedition (Diplomacy, Very Long, five frigates, 16 of 18 events resolved, an intervention call pending) and a fleet of 25 frigates; the in-game checks below were run the same day and every decode rule the code depends on is `verified` in the reference notes. The one departure from the design below: the command-room count is taken straight from the freighter base's objects in the save conversion rather than as a field on `BaseObjects`.
 
 **Depends on:** nothing new. The address decoder and the `now`-as-parameter pattern from arc 02 carry over.
 
@@ -12,7 +12,7 @@ Report on frigate fleet expeditions: what each running expedition is doing, whet
 
 Frigate expeditions run on real time. The freighter's Navigator offers five expeditions per day, each takes a Fleet Command Room and up to five frigates, and the fleet reports back through events along the way. The game shows this only on the freighter bridge. The save stores the whole picture: the expedition's start time, category, duration class, route, event log, and the frigates assigned, plus the day the current offer set was generated.
 
-The tool reads none of it today.
+Before this arc the tool read none of it.
 
 ---
 

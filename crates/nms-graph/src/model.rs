@@ -9,6 +9,7 @@ use rstar::RTree;
 use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
 use nms_core::delta::SaveDelta;
+use nms_core::fleet::Fleet;
 use nms_core::player::{PlayerBase, PlayerState};
 use nms_core::system::{Planet, System};
 use nms_save::model::SaveRoot;
@@ -59,6 +60,9 @@ pub struct GalaxyModel {
 
     /// Current player state (position, currencies).
     pub player_state: Option<PlayerState>,
+
+    /// The frigate fleet and its running expeditions; `None` only for a model built without a save.
+    pub fleet: Option<Fleet>,
 }
 
 impl Default for GalaxyModel {
@@ -82,6 +86,7 @@ impl GalaxyModel {
             address_to_id: HashMap::new(),
             node_map: HashMap::new(),
             player_state: None,
+            fleet: None,
         }
     }
 
@@ -136,6 +141,7 @@ impl GalaxyModel {
 
         // Extract player state and determine active galaxy
         let player_state = Some(save.to_core_player_state());
+        let fleet = Some(save.to_core_fleet());
         let active_galaxy = save.active_player_state().universe_address.reality_index;
 
         // Extract bases
@@ -160,6 +166,7 @@ impl GalaxyModel {
             address_to_id,
             node_map,
             player_state,
+            fleet,
         };
 
         model.build_edges(crate::edges::EdgeStrategy::default());
@@ -351,6 +358,11 @@ impl GalaxyModel {
         // 5. Update modified bases (insert_base overwrites by name)
         for base in &delta.modified_bases {
             self.insert_base(base.clone());
+        }
+
+        // 6. Replace the fleet when it changed
+        if let Some(fleet) = &delta.fleet {
+            self.fleet = Some(fleet.clone());
         }
     }
 }

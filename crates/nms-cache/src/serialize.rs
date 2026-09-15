@@ -38,6 +38,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
         systems,
         bases,
         player_state: model.player_state.clone(),
+        fleet: model.fleet.clone(),
         save_version,
         cached_at,
     }
@@ -47,7 +48,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
 const CACHE_MAGIC: &[u8; 4] = b"NMSC";
 
 /// Version of the archived data. Bump whenever an archived type changes shape, or whenever a decoding rule that feeds archived data changes (base objects are stored decoded), so caches written by an older binary are rebuilt instead of trusted.
-pub const CACHE_FORMAT_VERSION: u32 = 3;
+pub const CACHE_FORMAT_VERSION: u32 = 4;
 
 const HEADER_LEN: usize = CACHE_MAGIC.len() + 4;
 
@@ -137,6 +138,7 @@ pub fn rebuild_model(data: &CacheData) -> GalaxyModel {
     }
 
     model.player_state = data.player_state.clone();
+    model.fleet = data.fleet.clone();
     model.build_edges(EdgeStrategy::default());
 
     model
@@ -260,6 +262,73 @@ mod tests {
         bytes[4..8].copy_from_slice(&(CACHE_FORMAT_VERSION + 1).to_le_bytes());
         let err = deserialize(&bytes).unwrap_err();
         assert!(err.to_string().contains("version"), "{err}");
+    }
+
+    #[test]
+    fn cache_round_trips_fleet() {
+        use nms_core::fleet::{
+            DurationClass, Event, Expedition, ExpeditionCategory, Fleet, Frigate, FrigateClass,
+            FrigateGrade,
+        };
+        let mut model = test_model();
+        let expedition = Expedition {
+            seed: 0x5F98_B405_C7B3_0D18,
+            name: String::new(),
+            category: Some(ExpeditionCategory::Diplomacy),
+            category_raw: "Diplomacy".into(),
+            duration: Some(DurationClass::VeryLong),
+            duration_raw: "VeryLong".into(),
+            start: 1_789_344_506,
+            pause: 1_789_396_923,
+            speed_multiplier: 0.97,
+            location: Some(nms_core::GalacticAddress::new(1, 2, 3, 4, 0, 0)),
+            last_move: 1_789_398_099,
+            frigates: vec![0],
+            active: vec![0],
+            damaged: Vec::new(),
+            destroyed: Vec::new(),
+            events: vec![Event {
+                id: "^DIPLOMATIC_2".into(),
+                intervention_id: "^INT_TRADING_CHOOSE_FUND".into(),
+                is_intervention: true,
+                success: false,
+                location: None,
+                affected: Vec::new(),
+            }],
+            next_event: 0,
+            intervention_pending: true,
+            successes: 0,
+            failures: 0,
+        };
+        let frigate = Frigate {
+            index: 0,
+            name: "SV-8 Zuhotoh".into(),
+            class: Some(FrigateClass::Combat),
+            class_raw: "Combat".into(),
+            race: "Traders".into(),
+            grade: Some(FrigateGrade::S),
+            stats: vec![33, 14, 8, 10, 10, 0, 0, 0, 0, 0, 0],
+            traits: vec!["^COMBAT_PRI".into(), "^".into()],
+            damage_taken: 0,
+            times_damaged: 3,
+            repairs: 0,
+            expeditions: 34,
+            successes: 286,
+            failures: 9,
+            home: Some(nms_core::GalacticAddress::new(-532, -4, -1706, 46, 0, 0)),
+        };
+        let fleet = Fleet {
+            expeditions: vec![expedition],
+            frigates: vec![frigate],
+            offer_day: 20710,
+            launched_today: vec![0x5F98_B405_C7B3_0D18],
+            command_rooms: 7,
+        };
+        model.fleet = Some(fleet.clone());
+        let data = extract_cache_data(&model, 4720);
+        let restored = deserialize(&serialize(&data).unwrap()).unwrap();
+        let rebuilt = rebuild_model(&restored);
+        assert_eq!(rebuilt.fleet, Some(fleet));
     }
 
     #[test]

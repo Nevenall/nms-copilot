@@ -4,6 +4,7 @@
 //! (produce) can use them without creating a dependency cycle.
 
 use crate::address::GalacticAddress;
+use crate::fleet::Fleet;
 use crate::player::PlayerBase;
 use crate::system::{Planet, System, SystemId};
 
@@ -20,6 +21,8 @@ pub struct SaveDelta {
     pub new_bases: Vec<PlayerBase>,
     /// Modified bases (name exists but content differs).
     pub modified_bases: Vec<PlayerBase>,
+    /// The fleet when anything about it changed; it is small and changes on most saves, so it is replaced rather than diffed.
+    pub fleet: Option<Fleet>,
 }
 
 /// Player position change.
@@ -38,6 +41,7 @@ impl SaveDelta {
             player_moved: None,
             new_bases: Vec::new(),
             modified_bases: Vec::new(),
+            fleet: None,
         }
     }
 
@@ -48,6 +52,7 @@ impl SaveDelta {
             && self.player_moved.is_none()
             && self.new_bases.is_empty()
             && self.modified_bases.is_empty()
+            && self.fleet.is_none()
     }
 
     /// Total number of individual changes.
@@ -57,6 +62,7 @@ impl SaveDelta {
             + self.player_moved.as_ref().map_or(0, |_| 1)
             + self.new_bases.len()
             + self.modified_bases.len()
+            + self.fleet.as_ref().map_or(0, |_| 1)
     }
 }
 
@@ -106,7 +112,14 @@ mod tests {
             }),
             new_bases: vec![base.clone()],
             modified_bases: vec![base],
+            fleet: Some(Fleet {
+                expeditions: Vec::new(),
+                frigates: Vec::new(),
+                offer_day: 20710,
+                launched_today: Vec::new(),
+                command_rooms: 1,
+            }),
         };
-        assert_eq!(delta.change_count(), 5);
+        assert_eq!(delta.change_count(), 6);
     }
 }

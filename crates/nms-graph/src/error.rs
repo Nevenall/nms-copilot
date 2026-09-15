@@ -11,4 +11,7 @@ pub enum GraphError {
 
     #[error("no player position available")]
     NoPlayerPosition,
+
+    #[error("no fleet data in this save")]
+    NoFleet,
 }

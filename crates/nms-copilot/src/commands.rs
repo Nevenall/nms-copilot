@@ -69,6 +69,12 @@ pub enum Action {
         width: Option<usize>,
     },
 
+    /// Show frigate expeditions, the Navigator's offers, and the fleet.
+    Fleet {
+        /// An expedition number for the full view, or "frigates" for every frigate. Omit for the overview.
+        target: Option<String>,
+    },
+
     /// Display aggregate galaxy statistics.
     Stats {
         /// Show biome distribution table.
@@ -644,6 +650,16 @@ mod tests {
     fn test_parse_command_dash_help_shows_subcommand_help() {
         let result = parse_line("find --help");
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_fleet_targets() {
+        let action = parse_line("fleet").unwrap().unwrap();
+        assert!(matches!(action, Action::Fleet { target: None }));
+        let action = parse_line("fleet frigates").unwrap().unwrap();
+        assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "frigates"));
+        let action = parse_line("fleet 2").unwrap().unwrap();
+        assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "2"));
     }
 
     #[test]

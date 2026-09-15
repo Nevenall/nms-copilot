@@ -279,9 +279,10 @@ fn power_summary(objects: &nms_core::BaseObjects) -> PowerSummary {
 
 // ── Alerts ──────────────────────────────────────────────────────
 
-/// Something at a base that wants a visit.
+/// Something that wants the player's attention: a base to visit, or the fleet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Alert {
+    /// The base's name, or `Fleet` for the fleet alerts.
     pub base: String,
     pub kind: AlertKind,
 }
@@ -292,6 +293,21 @@ pub enum AlertKind {
     CropsReady { crop: String, count: usize },
     /// Pipe network `network` is at capacity.
     DepotsFull { network: u32, capacity: u32 },
+    /// Expedition `number` is holding for the player's decision, since `since` when known.
+    FleetWaiting {
+        seed: u64,
+        number: usize,
+        category: String,
+        since: Option<i64>,
+    },
+    /// Expedition `number` has resolved its last event and awaits its debrief.
+    FleetReturned {
+        seed: u64,
+        number: usize,
+        category: String,
+    },
+    /// The offer day has rolled since the save; `count` fresh expeditions await at the Navigator.
+    NewOffers { count: usize, day: i64 },
 }
 
 impl Alert {
@@ -304,6 +320,9 @@ impl Alert {
             AlertKind::DepotsFull { network, .. } => {
                 format!("full:{}:{network}", self.base.to_lowercase())
             }
+            AlertKind::FleetWaiting { seed, .. } => format!("fleet:waiting:{seed:x}"),
+            AlertKind::FleetReturned { seed, .. } => format!("fleet:returned:{seed:x}"),
+            AlertKind::NewOffers { day, .. } => format!("offers:{day}"),
         }
     }
 
@@ -316,14 +335,37 @@ impl Alert {
                 self.base,
                 crate::display::thousands(*capacity)
             ),
+            AlertKind::FleetWaiting {
+                number,
+                category,
+                since,
+                ..
+            } => {
+                let since = since
+                    .map(|s| format!(" since {}", crate::display::format_clock(s)))
+                    .unwrap_or_default();
+                format!(
+                    "Fleet: expedition {number} ({category}) is waiting for your decision{since}"
+                )
+            }
+            AlertKind::FleetReturned {
+                number, category, ..
+            } => format!(
+                "Fleet: expedition {number} ({category}) has returned, debrief at the Fleet Command Room"
+            ),
+            AlertKind::NewOffers { count, .. } => {
+                format!("Navigator: {count} new expeditions available")
+            }
         }
     }
 }
 
-/// Every current alert across all bases, in the order [`execute_base`] lists bases.
+/// Every current alert: the bases in the order [`execute_base`] lists them, then the fleet.
 pub fn current_alerts(model: &GalaxyModel, now: i64) -> Vec<Alert> {
     let statuses = execute_base(model, &BaseQuery::default(), now).unwrap_or_default();
-    alerts_from(&statuses)
+    let mut alerts = alerts_from(&statuses);
+    alerts.extend(crate::fleet::current_fleet_alerts(model, now));
+    alerts
 }
 
 /// Alerts for already-computed statuses.
@@ -359,6 +401,12 @@ pub struct AlertSummary {
     pub crops_ready: usize,
     /// Extraction networks at capacity.
     pub networks_full: usize,
+    /// Expeditions holding for the player.
+    pub fleet_waiting: usize,
+    /// Expeditions back and awaiting their debrief.
+    pub fleet_returned: usize,
+    /// Fresh offers at the Navigator, once the day has rolled.
+    pub new_offers: usize,
 }
 
 impl AlertSummary {
@@ -368,13 +416,20 @@ impl AlertSummary {
             match alert.kind {
                 AlertKind::CropsReady { count, .. } => summary.crops_ready += count,
                 AlertKind::DepotsFull { .. } => summary.networks_full += 1,
+                AlertKind::FleetWaiting { .. } => summary.fleet_waiting += 1,
+                AlertKind::FleetReturned { .. } => summary.fleet_returned += 1,
+                AlertKind::NewOffers { count, .. } => summary.new_offers += count,
             }
         }
         summary
     }
 
     pub fn is_empty(&self) -> bool {
-        self.crops_ready == 0 && self.networks_full == 0
+        self.crops_ready == 0
+            && self.networks_full == 0
+            && self.fleet_waiting == 0
+            && self.fleet_returned == 0
+            && self.new_offers == 0
     }
 }
 
@@ -586,7 +641,8 @@ mod tests {
             summary,
             AlertSummary {
                 crops_ready: 16,
-                networks_full: 1
+                networks_full: 1,
+                ..AlertSummary::default()
             }
         );
         assert!(AlertSummary::default().is_empty());

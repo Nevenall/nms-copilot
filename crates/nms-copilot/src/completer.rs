@@ -31,8 +31,8 @@ impl CopilotCompleter {
 }
 
 const COMMANDS: &[&str] = &[
-    "base", "convert", "exit", "find", "help", "info", "list", "map", "quit", "reset", "route",
-    "set", "show", "stats", "status",
+    "base", "convert", "exit", "find", "fleet", "help", "info", "list", "map", "quit", "reset",
+    "route", "set", "show", "stats", "status",
 ];
 
 const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];
@@ -52,6 +52,8 @@ const FIND_FLAGS: &[&str] = &[
 const STATS_FLAGS: &[&str] = &["--biomes", "--discoveries"];
 
 const BASE_FLAGS: &[&str] = &["--width"];
+
+const FLEET_SUBCOMMANDS: &[&str] = &["frigates"];
 
 const CONVERT_FLAGS: &[&str] = &[
     "--glyphs", "--coords", "--ga", "--voxel", "--ssi", "--planet", "--galaxy",
@@ -104,6 +106,9 @@ impl Completer for CopilotCompleter {
 
             ["list"] if trailing_space => ("", LIST_SUBCOMMANDS.to_vec()),
             ["list", _] if !trailing_space => (words[1], LIST_SUBCOMMANDS.to_vec()),
+
+            ["fleet"] if trailing_space => ("", FLEET_SUBCOMMANDS.to_vec()),
+            ["fleet", _] if !trailing_space => (words[1], FLEET_SUBCOMMANDS.to_vec()),
 
             ["show"] if trailing_space => ("", SHOW_SUBCOMMANDS.to_vec()),
             ["show", _] if !trailing_space => (words[1], SHOW_SUBCOMMANDS.to_vec()),
@@ -514,6 +519,17 @@ mod tests {
         let results = c.complete("FIND --b", 8);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
         assert!(values.contains(&"--biome"));
+    }
+
+    #[test]
+    fn test_complete_fleet_command_offers_frigates() {
+        let mut c = test_completer();
+        let results = c.complete("fleet ", 6);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["frigates"]);
+        let results = c.complete("fleet fr", 8);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["frigates"]);
     }
 
     #[test]

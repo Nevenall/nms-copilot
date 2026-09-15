@@ -12,13 +12,17 @@ use tokio::sync::RwLock;
 
 use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
+use nms_core::fleet::ExpeditionState;
 use nms_core::galaxy::Galaxy;
 use nms_graph::BiomeFilter;
 use nms_graph::GalaxyModel;
 use nms_graph::RoutingAlgorithm;
 use nms_query::base::{BaseQuery, alerts_from, execute_base};
-use nms_query::display::{format_distance, hex_to_emoji};
+use nms_query::display::{
+    expedition_status_cell, format_distance, format_navigator_line, hex_to_emoji,
+};
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
+use nms_query::fleet::{execute_fleet, fleet_alerts};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
 use nms_query::show::{ShowQuery, ShowResult, execute_show};
 use nms_query::stats::{StatsQuery, execute_stats};
@@ -48,6 +52,7 @@ impl ToolRegistry for NmsTools {
             show_system_tool(),
             show_base_tool(),
             base_status_tool(),
+            fleet_status_tool(),
             convert_coordinates_tool(),
             galaxy_stats_tool(),
         ]
@@ -63,6 +68,7 @@ impl ToolRegistry for NmsTools {
             "show_system" => Some(Box::pin(handle_show_system(model, args))),
             "show_base" => Some(Box::pin(handle_show_base(model, args))),
             "base_status" => Some(Box::pin(handle_base_status(model, args))),
+            "fleet_status" => Some(Box::pin(handle_fleet_status(model, args))),
             "convert_coordinates" => Some(Box::pin(handle_convert(model, args))),
             "galaxy_stats" => Some(Box::pin(handle_galaxy_stats(model, args))),
             _ => None,
@@ -240,6 +246,14 @@ fn base_status_tool() -> Tool {
                 }
             }
         })),
+    )
+}
+
+fn fleet_status_tool() -> Tool {
+    Tool::new(
+        "fleet_status",
+        "Frigate expeditions: which are running, waiting for the player's decision, or back and awaiting debrief, with elapsed time and a rough estimate of time left; the Navigator's remaining daily offers and next refresh; free Fleet Command Rooms; and every frigate with its stats and whether it is out. Timing is computed from the current clock against the last save.",
+        schema(json!({ "type": "object", "properties": {} })),
     )
 }
 
@@ -740,6 +754,135 @@ async fn handle_base_status(
     text_result(json)
 }
 
+/// Build JSON for the fleet status.
+pub(crate) fn build_fleet_status_json(
+    model: &GalaxyModel,
+    now: i64,
+) -> Result<Value, nms_graph::GraphError> {
+    let status = execute_fleet(model, now)?;
+    let expeditions: Vec<Value> = status
+        .expeditions
+        .iter()
+        .map(|row| {
+            let e = &row.expedition;
+            let state = match row.state {
+                ExpeditionState::Waiting => "waiting_for_player",
+                ExpeditionState::Complete => "returned",
+                ExpeditionState::Running => "running",
+            };
+            let location = e.location.map(|addr| {
+                json!({
+                    "system": row.system.as_ref().and_then(|s| s.name.clone()),
+                    "hex": format!("{:012X}", addr.packed()),
+                    "distance_from_player": row.distance_from_player.map(format_distance),
+                })
+            });
+            let frigates: Vec<Value> = row
+                .frigates
+                .iter()
+                .map(|f| {
+                    json!({
+                        "index": f.frigate.index + 1,
+                        "name": f.frigate.label(),
+                        "class": f.frigate.class_label(),
+                        "grade": f.frigate.grade_label(),
+                        "damaged": e.damaged.contains(&f.frigate.index),
+                        "destroyed": e.destroyed.contains(&f.frigate.index),
+                    })
+                })
+                .collect();
+            let events: Vec<Value> = e
+                .events
+                .iter()
+                .enumerate()
+                .map(|(i, ev)| {
+                    json!({
+                        "number": i + 1,
+                        "event": ev.label(),
+                        "decision": ev.intervention_label(),
+                        "resolved": i < e.resolved(),
+                        "success": (i < e.resolved()).then_some(ev.success),
+                        "where": row.event_places.get(i),
+                    })
+                })
+                .collect();
+            json!({
+                "number": row.number,
+                "seed": format!("{:#x}", e.seed),
+                "name": e.name,
+                "type": row.category_label(),
+                "length": row.duration_label(),
+                "state": state,
+                "status": expedition_status_cell(row),
+                "started_unix": e.start,
+                "elapsed_secs": row.elapsed_secs,
+                "waiting_since_unix": e.waiting_since(),
+                "waiting_secs": row.waiting_secs,
+                "estimate_remaining_secs": row.estimate_remaining_secs,
+                "events_resolved": e.resolved(),
+                "events_total": e.total(),
+                "successes": e.successes,
+                "failures": e.failures,
+                "speed_multiplier": e.speed_multiplier,
+                "location": location,
+                "frigates": frigates,
+                "events": events,
+            })
+        })
+        .collect();
+    let frigates: Vec<Value> = status.frigates.iter().map(|f| {
+        let fr = &f.frigate;
+        json!({
+            "index": fr.index + 1,
+            "name": fr.label(),
+            "class": fr.class_label(),
+            "race": fr.race_label(),
+            "grade": fr.grade_label(),
+            "stats": { "combat": fr.combat(), "exploration": fr.exploration(), "industrial": fr.industrial(), "trade": fr.trade(), "stat_5": fr.stat_five(), "support": fr.support() },
+            "perks": fr.perks(),
+            "modules": fr.module_summary(),
+            "module_ids": fr.trait_labels(),
+            "damage_taken": fr.damage_taken,
+            "times_damaged": fr.times_damaged,
+            "expeditions": fr.expeditions,
+            "successes": fr.successes,
+            "failures": fr.failures,
+            "out_on": f.out_on,
+        })
+    }).collect();
+    let alerts: Vec<String> = fleet_alerts(&status).iter().map(|a| a.text()).collect();
+    Ok(json!({
+        "now_unix": now,
+        "expeditions": expeditions,
+        "navigator": {
+            "offer_day": status.offers.day,
+            "next_refresh_unix": status.offers.next_refresh,
+            "secs_until_refresh": status.offers.secs_until_refresh,
+            "refreshed": status.offers.refreshed,
+            "launched_today": status.offers.launched_today,
+            "offers_left": status.offers.left,
+            "offers_per_day": status.offers.per_day,
+        },
+        "command_rooms": status.command_rooms,
+        "rooms_free": status.rooms_free,
+        "frigates_total": status.frigates.len(),
+        "frigates_home": status.frigates_home,
+        "frigates": frigates,
+        "summary": format_navigator_line(&status),
+        "alerts": alerts,
+    }))
+}
+
+async fn handle_fleet_status(
+    model: Arc<RwLock<GalaxyModel>>,
+    _args: Value,
+) -> Result<CallToolResult, ErrorData> {
+    let model = model.read().await;
+    let json =
+        build_fleet_status_json(&model, unix_now()).map_err(|e| tool_error(&e.to_string()))?;
+    text_result(json)
+}
+
 async fn handle_convert(
     _model: Arc<RwLock<GalaxyModel>>,
     args: Value,
@@ -847,12 +990,13 @@ mod tests {
     }
 
     #[test]
-    fn test_tools_has_all_nine() {
+    fn test_tools_has_all_ten() {
         let tools = NmsTools::new(test_model());
         let tool_list = tools.tools();
         let names: Vec<&str> = tool_list.iter().map(|t| t.name.as_ref()).collect();
-        assert_eq!(names.len(), 9);
+        assert_eq!(names.len(), 10);
         assert!(names.contains(&"base_status"));
+        assert!(names.contains(&"fleet_status"));
         assert!(names.contains(&"search_planets"));
         assert!(names.contains(&"plan_route"));
         assert!(names.contains(&"where_am_i"));
@@ -872,7 +1016,35 @@ mod tests {
     #[test]
     fn test_tools_tool_count() {
         let tools = NmsTools::new(test_model());
-        assert_eq!(tools.tool_count(), 9);
+        assert_eq!(tools.tool_count(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_fleet_status_tool_returns_navigator_and_lists() {
+        let tools = NmsTools::new(test_model());
+        let result = tools
+            .call("fleet_status", json!({}))
+            .unwrap()
+            .await
+            .unwrap();
+        let text = result.content[0]
+            .as_text()
+            .map(|t| t.text.clone())
+            .expect("text content");
+        let json: Value = serde_json::from_str(&text).unwrap();
+        assert!(json["expeditions"].as_array().unwrap().is_empty());
+        assert!(json["frigates"].as_array().unwrap().is_empty());
+        assert_eq!(json["navigator"]["offers_per_day"], 5);
+        assert_eq!(json["navigator"]["offer_day"], 0);
+        assert_eq!(json["command_rooms"], 0);
+        assert!(
+            json["summary"]
+                .as_str()
+                .unwrap()
+                .starts_with("Navigator: no offers recorded yet")
+        );
+        assert!(json["alerts"].as_array().unwrap().is_empty());
+        assert!(json["alerts"].is_array());
     }
 
     #[tokio::test]
@@ -1115,6 +1287,7 @@ mod tests {
             player_moved: None,
             new_bases: vec![],
             modified_bases: vec![],
+            fleet: None,
         };
 
         {
@@ -1155,6 +1328,7 @@ mod tests {
                 player_moved: None,
                 new_bases: vec![],
                 modified_bases: vec![],
+                fleet: None,
             });
         }
 

@@ -9,10 +9,11 @@ use nms_graph::query::BiomeFilter;
 use nms_graph::route::RoutingAlgorithm;
 use nms_query::base::{BaseQuery, execute_base};
 use nms_query::display::{
-    format_base_detail, format_base_overview, format_find_results, format_route,
+    format_base_detail, format_base_overview, format_find_results, format_fleet, format_route,
     format_show_result, format_stats, hex_to_emoji,
 };
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
+use nms_query::fleet::{FleetTarget, execute_fleet};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
 use nms_query::show::{ShowQuery, execute_show};
 use nms_query::stats::{StatsQuery, execute_stats};
@@ -74,6 +75,7 @@ pub fn dispatch(
 
         Action::Show { target } => dispatch_show(model, target),
         Action::Base { name, width } => dispatch_base(model, name.as_deref(), *width),
+        Action::Fleet { target } => dispatch_fleet(model, target.as_deref()),
 
         Action::Stats {
             biomes,
@@ -583,6 +585,13 @@ fn dispatch_base(
     }
 }
 
+/// `fleet` / `fleet <n>` / `fleet frigates`: the expedition overview, one expedition in full, or every frigate.
+fn dispatch_fleet(model: &GalaxyModel, target: Option<&str>) -> Result<String, String> {
+    let target = FleetTarget::parse(target)?;
+    let status = execute_fleet(model, crate::session::unix_now()).map_err(|e| e.to_string())?;
+    format_fleet(&status, target, &Theme::default_dark())
+}
+
 fn base_type_label(bt: &BaseType) -> &'static str {
     match bt {
         BaseType::HomePlanetBase => "home",
@@ -647,6 +656,7 @@ Commands:
   route      Plan a route through discovered systems
   show       Show system or base details
   base       Show crops, extraction networks, and power at your bases
+  fleet      Show frigate expeditions, the Navigator's offers, and the fleet
   stats      Display aggregate galaxy statistics
   convert    Convert between coordinate formats
   set        Set session context (position, biome, warp-range)
@@ -666,6 +676,9 @@ Examples:
   show base \"Acadia National Park\"
   base
   base \"Farm\"
+  fleet
+  fleet 1
+  fleet frigates
   stats --biomes
   convert --glyphs 01717D8A4EA2
   set biome Lush

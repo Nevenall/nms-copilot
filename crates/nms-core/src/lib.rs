@@ -5,6 +5,7 @@ pub mod base;
 pub mod biome;
 pub mod delta;
 pub mod discovery;
+pub mod fleet;
 pub mod galaxy;
 pub mod glyph;
 pub mod player;
@@ -18,6 +19,10 @@ pub use base::{
 pub use biome::{Biome, BiomeParseError, BiomeSubType};
 pub use delta::{PlayerMoved, SaveDelta};
 pub use discovery::{Discovery, DiscoveryParseError, DiscoveryRecord};
+pub use fleet::{
+    DurationClass, Event, Expedition, ExpeditionCategory, ExpeditionState, Fleet, Frigate,
+    FrigateClass, FrigateGrade,
+};
 pub use galaxy::{Galaxy, GalaxyType, GalaxyTypeParseError};
 pub use glyph::{Glyph, GlyphParseError};
 pub use player::{BaseType, BaseTypeParseError, PlayerBase, PlayerState};

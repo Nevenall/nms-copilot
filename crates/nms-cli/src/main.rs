@@ -7,6 +7,7 @@ mod completions;
 mod convert;
 mod export;
 mod find;
+mod fleet;
 mod import;
 mod info;
 mod list;
@@ -98,6 +99,16 @@ enum Commands {
         /// Layout width in columns for the full view (default: terminal width; sections stack when output is piped).
         #[arg(long)]
         width: Option<usize>,
+    },
+
+    /// Show frigate expeditions, the Navigator's offers, and the fleet.
+    Fleet {
+        /// Path to save file (auto-detects if omitted).
+        #[arg(long)]
+        save: Option<PathBuf>,
+
+        /// An expedition number for the full view, or "frigates" for every frigate. Omit for the overview.
+        target: Option<String>,
     },
 
     /// Display aggregate galaxy statistics.
@@ -421,6 +432,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Base { save, name, width } => {
             let path = resolve_save_with_slot(save, slot)?;
             base::run(Some(path), name, width)
+        }
+        Commands::Fleet { save, target } => {
+            let path = resolve_save_with_slot(save, slot)?;
+            fleet::run(Some(path), target)
         }
         Commands::Stats {
             save,

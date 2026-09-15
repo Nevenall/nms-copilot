@@ -34,6 +34,42 @@
             "Specials": 1500,
             "Health": 200,
             "TimeAlive": 500000,
+            "FleetExpeditions": [
+                {
+                    "Seed": [true, "0x5F98B405C7B30D18"],
+                    "CustomName": "",
+                    "ExpeditionCategory": { "ExpeditionCategory": "Diplomacy" },
+                    "ExpeditionDuration": { "ExpeditionDuration": "VeryLong" },
+                    "StartTime": 1789344506,
+                    "PauseTime": 1789396923,
+                    "SpeedMultiplier": 1.0,
+                    "UA": "0x002A0032F38064",
+                    "TimeOfLastUAChange": 1789398099,
+                    "AllFrigateIndices": [0, 1, 2],
+                    "ActiveFrigateIndices": [0, 1, 2],
+                    "DamagedFrigateIndices": [],
+                    "DestroyedFrigateIndices": [],
+                    "Events": [
+                        {"EventID": "^DIPLOMATIC_1", "IsInterventionEvent": false, "InterventionEventID": "^", "Success": true, "UA": "0x002A0032F38064", "AffectedFrigateIndices": []},
+                        {"EventID": "^COMBAT_2", "IsInterventionEvent": false, "InterventionEventID": "^", "Success": true, "UA": "0x00100000000064", "AffectedFrigateIndices": []},
+                        {"EventID": "^DIPLOMATIC_2", "IsInterventionEvent": true, "InterventionEventID": "^INT_TRADING_CHOOSE_FUND", "Success": false, "UA": 0, "AffectedFrigateIndices": []}
+                    ],
+                    "NextEventToTrigger": 2,
+                    "NumberOfSuccessfulEventsThisExpedition": 2,
+                    "NumberOfFailedEventsThisExpedition": 0,
+                    "InterventionPhoneCallActivated": true,
+                    "InterventionEventMissionID": "^",
+                    "Powerups": ["^", "^", "^"]
+                }
+            ],
+            "FleetFrigates": [
+                {"CustomName": "", "FrigateClass": {"FrigateClass": "Combat"}, "Race": {"AlienRace": "Traders"}, "InventoryClass": {"InventoryClass": "S"}, "Stats": [33, 14, 8, 10, 10, 0, 0, 0, 0, 0, 0], "TraitIDs": ["^COMBAT_PRI", "^EXPLORE_TER_4", "^COMBAT_SEC_3", "^TRADING_TER_5", "^COMBAT_SEC_1"], "DamageTaken": 0, "NumberOfTimesDamaged": 3, "RepairsMade": 0, "TotalNumberOfExpeditions": 34, "TotalNumberOfSuccessfulEvents": 286, "TotalNumberOfFailedEvents": 9, "HomeSystemSeed": [true, "0x002A0032F38064"]},
+                {"CustomName": "", "FrigateClass": {"FrigateClass": "Exploration"}, "Race": {"AlienRace": "Explorers"}, "InventoryClass": {"InventoryClass": "A"}, "Stats": [11, 36, 8, 10, 11, 0, 0, 0, 0, 0, 0], "TraitIDs": ["^EXPLORE_PRI", "^EXPLORE_SEC_6", "^SPEED_TER_2", "^", "^"], "DamageTaken": 0, "NumberOfTimesDamaged": 1, "RepairsMade": 0, "TotalNumberOfExpeditions": 34, "TotalNumberOfSuccessfulEvents": 282, "TotalNumberOfFailedEvents": 13, "HomeSystemSeed": [true, "0x002A0032F38064"]},
+                {"CustomName": "", "FrigateClass": {"FrigateClass": "Diplomacy"}, "Race": {"AlienRace": "Warriors"}, "InventoryClass": {"InventoryClass": "B"}, "Stats": [9, 8, 7, 24, 9, 0, 0, 0, 0, 0, 0], "TraitIDs": ["^TRADING_PRI", "^", "^", "^", "^"], "DamageTaken": 12, "NumberOfTimesDamaged": 2, "RepairsMade": 1, "TotalNumberOfExpeditions": 12, "TotalNumberOfSuccessfulEvents": 90, "TotalNumberOfFailedEvents": 4, "HomeSystemSeed": [true, "0x00100000000064"]},
+                {"CustomName": "", "FrigateClass": {"FrigateClass": "Support"}, "Race": {"AlienRace": "Traders"}, "InventoryClass": {"InventoryClass": "C"}, "Stats": [2, 3, 2, 4, 1, 22, 0, 0, 0, 0, 0], "TraitIDs": ["^FUEL_PRI", "^", "^", "^", "^"], "DamageTaken": 0, "NumberOfTimesDamaged": 0, "RepairsMade": 0, "TotalNumberOfExpeditions": 3, "TotalNumberOfSuccessfulEvents": 20, "TotalNumberOfFailedEvents": 0, "HomeSystemSeed": [true, "0x00100000000064"]}
+            ],
+            "ExpeditionSeedsSelectedToday": ["0x5F98B405C7B30D18"],
+            "LastKnownDay": 20710,
             "PersistentPlayerBases": [
                 {
                     "BaseVersion": 8,
@@ -78,6 +114,24 @@
                     "Owner": { "LID": "", "UID": "123", "USN": "TestUser", "PTK": "ST", "TS": 1700100000 },
                     "Name": "Frost Outpost",
                     "BaseType": { "PersistentBaseTypes": "ExternalPlanetBase" },
+                    "LastEditedById": "",
+                    "LastEditedByUsername": ""
+                },
+                {
+                    "BaseVersion": 8,
+                    "GalacticAddress": "0x00100000000064",
+                    "Position": [0.0, 0.0, 0.0],
+                    "Forward": [0.0, 0.0, 1.0],
+                    "LastUpdateTimestamp": 1700100000,
+                    "Objects": [
+                        {"ObjectID": "^FRE_ROOM_FLEET", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0},
+                        {"ObjectID": "^FRE_ROOM_FLEET", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0},
+                        {"ObjectID": "^FRE_ROOM_STORE0", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0}
+                    ],
+                    "RID": "",
+                    "Owner": { "LID": "", "UID": "123", "USN": "TestUser", "PTK": "ST", "TS": 1700100000 },
+                    "Name": "Home Freighter",
+                    "BaseType": { "PersistentBaseTypes": "FreighterBase" },
                     "LastEditedById": "",
                     "LastEditedByUsername": ""
                 }

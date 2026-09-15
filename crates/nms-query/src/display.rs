@@ -6,12 +6,14 @@
 
 use crate::base::{Alert, AlertKind, AlertSummary, BaseStatus, CropRow, PowerSummary};
 use crate::find::FindResult;
+use crate::fleet::{ExpeditionRow, FleetStatus, FleetTarget};
 use crate::layout::side_by_side;
 use crate::route::RouteResult;
 use crate::show::{ShowBaseResult, ShowResult, ShowSystemResult};
 use crate::stats::StatsResult;
 use crate::table::{Builder, build_grouped_table, build_table, nms_theme, nms_theme_no_color};
 use crate::theme::Theme;
+use nms_core::fleet::ExpeditionState;
 
 /// Format a distance in light-years for display.
 ///
@@ -763,7 +765,7 @@ pub fn format_alert_line(alerts: &[Alert]) -> String {
         .iter()
         .filter_map(|a| match &a.kind {
             AlertKind::CropsReady { crop, count } => Some(format!("{count} {crop} at {}", a.base)),
-            AlertKind::DepotsFull { .. } => None,
+            _ => None,
         })
         .collect();
     let full: Vec<String> = alerts
@@ -772,7 +774,20 @@ pub fn format_alert_line(alerts: &[Alert]) -> String {
             AlertKind::DepotsFull { network, .. } => {
                 Some(format!("{} (network {network})", a.base))
             }
-            AlertKind::CropsReady { .. } => None,
+            _ => None,
+        })
+        .collect();
+    let fleet: Vec<String> = alerts
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AlertKind::FleetWaiting { number, .. } => {
+                Some(format!("expedition {number} waiting for you"))
+            }
+            AlertKind::FleetReturned { number, .. } => {
+                Some(format!("expedition {number} returned"))
+            }
+            AlertKind::NewOffers { count, .. } => Some(format!("{count} new offers")),
+            _ => None,
         })
         .collect();
     let ready = if ready.is_empty() {
@@ -785,7 +800,11 @@ pub fn format_alert_line(alerts: &[Alert]) -> String {
     } else {
         format!("Full depots: {}", full.join(", "))
     };
-    format!("{ready}. {full}.")
+    let mut line = format!("{ready}. {full}.");
+    if !fleet.is_empty() {
+        line.push_str(&format!(" Fleet: {}.", fleet.join(", ")));
+    }
+    line
 }
 
 /// Compact indicator for the prompt: `🌱 16 ready · 📦 1 full`, or empty when nothing is pending.
@@ -797,7 +816,288 @@ pub fn format_alert_indicator(summary: &AlertSummary) -> String {
     if summary.networks_full > 0 {
         parts.push(format!("\u{1F4E6} {} full", summary.networks_full));
     }
+    if summary.fleet_waiting > 0 {
+        parts.push(format!("\u{1F680} {} waiting", summary.fleet_waiting));
+    }
+    if summary.fleet_returned > 0 {
+        parts.push(format!("\u{2693} {} returned", summary.fleet_returned));
+    }
+    if summary.new_offers > 0 {
+        parts.push(format!("\u{1F9ED} {} offers", summary.new_offers));
+    }
     parts.join(" \u{00B7} ")
+}
+
+// ── Fleet ───────────────────────────────────────────────────────
+
+/// Local wall-clock time, `HH:MM`.
+pub fn format_clock(ts: i64) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string())
+        .unwrap_or_else(|| "?".to_string())
+}
+
+/// The status column of the fleet overview: what the expedition is doing and, as an estimate, how long it has left.
+pub fn expedition_status_cell(row: &ExpeditionRow) -> String {
+    let estimate = row.estimate_remaining_secs.map(format_duration);
+    match row.state {
+        ExpeditionState::Waiting => {
+            let since = row
+                .expedition
+                .waiting_since()
+                .map(|s| {
+                    format!(
+                        " since {} ({})",
+                        format_clock(s),
+                        format_duration(row.waiting_secs.unwrap_or(0))
+                    )
+                })
+                .unwrap_or_default();
+            match estimate {
+                Some(left) => format!("waiting for you{since}, about {left} left once answered"),
+                None => format!("waiting for you{since}"),
+            }
+        }
+        ExpeditionState::Complete => "returned, awaiting debrief".to_string(),
+        ExpeditionState::Running => {
+            let mut text = match estimate {
+                Some(left) => format!("about {left} left"),
+                None => "under way".to_string(),
+            };
+            if row.damaged() > 0 {
+                text.push_str(&format!(", {} damaged", row.damaged()));
+            }
+            text
+        }
+    }
+}
+
+/// The Navigator line under the overview: offers left, the next refresh, free command rooms, and frigates at home.
+pub fn format_navigator_line(status: &FleetStatus) -> String {
+    let offers = if status.offers.day == 0 {
+        "Navigator: no offers recorded yet".to_string()
+    } else if status.offers.refreshed {
+        format!(
+            "Navigator: {} new offers waiting (day rolled at 00:00 UTC)",
+            status.offers.left
+        )
+    } else {
+        format!(
+            "Navigator: {} of today's {} offers left \u{00B7} new offers in {} (00:00 UTC)",
+            status.offers.left,
+            status.offers.per_day,
+            format_duration(status.offers.secs_until_refresh)
+        )
+    };
+    format!(
+        "{offers} \u{00B7} {} of {} command rooms free \u{00B7} {} of {} frigates at home",
+        status.rooms_free,
+        status.command_rooms,
+        status.frigates_home,
+        status.frigates.len()
+    )
+}
+
+/// One row per running expedition, then the Navigator line.
+pub fn format_fleet_overview(status: &FleetStatus, theme: &Theme) -> String {
+    let table_theme = table_theme_for(theme);
+    let mut out = String::new();
+    if status.expeditions.is_empty() {
+        out.push_str("  No expeditions running.\n");
+    } else {
+        let mut builder = Builder::default();
+        builder.push_record([
+            "#", "Type", "Length", "Frigates", "Events", "Elapsed", "Status",
+        ]);
+        for row in &status.expeditions {
+            let frigates = if row.damaged() > 0 {
+                format!(
+                    "{} ({} damaged)",
+                    row.expedition.frigates.len(),
+                    row.damaged()
+                )
+            } else {
+                row.expedition.frigates.len().to_string()
+            };
+            builder.push_record([
+                row.number.to_string(),
+                row.category_label().to_string(),
+                row.duration_label().to_string(),
+                frigates,
+                format!("{} / {}", row.expedition.resolved(), row.expedition.total()),
+                format_duration(row.elapsed_secs),
+                expedition_status_cell(row),
+            ]);
+        }
+        builder.push_record(["", "", "", "", "", "", ""]);
+        out.push_str(
+            build_table(builder, &["FLEET"], &table_theme, "Expeditions").trim_end_matches('\n'),
+        );
+        out.push('\n');
+    }
+    out.push_str(&format!("\n  {}\n", format_navigator_line(status)));
+    out
+}
+
+/// One expedition in full: its timing, the frigates on it, and the event log.
+pub fn format_expedition_detail(row: &ExpeditionRow, now: i64, theme: &Theme) -> String {
+    let table_theme = table_theme_for(theme);
+    let e = &row.expedition;
+    let mut blocks: Vec<String> = Vec::new();
+
+    let mut builder = Builder::default();
+    builder.push_record(["Property", "Detail"]);
+    builder.push_record(["Expedition", &row.number.to_string()]);
+    if !e.name.is_empty() {
+        builder.push_record(["Name", &e.name]);
+    }
+    builder.push_record(["Type", row.category_label()]);
+    builder.push_record(["Length", row.duration_label()]);
+    builder.push_record(["Status", &expedition_status_cell(row)]);
+    builder.push_record(["Started", &format_snapshot(e.start, now)]);
+    builder.push_record(["Elapsed", &format_duration(row.elapsed_secs)]);
+    if let Some(since) = e.waiting_since() {
+        builder.push_record(["Waiting since", &format_snapshot(since, now)]);
+    }
+    builder.push_record([
+        "Events",
+        &format!("{} of {} resolved", e.resolved(), e.total()),
+    ]);
+    builder.push_record([
+        "Outcomes",
+        &format!("{} succeeded, {} failed", e.successes, e.failures),
+    ]);
+    let speed_modules: usize = row.frigates.iter().map(|f| f.frigate.speed_modules()).sum();
+    let speed = match speed_modules {
+        0 => format!("{:.2}", e.speed_multiplier),
+        1 => format!("{:.2} (1 speed module aboard)", e.speed_multiplier),
+        n => format!("{:.2} ({n} speed modules aboard)", e.speed_multiplier),
+    };
+    builder.push_record(["Speed", &speed]);
+    let distance = row
+        .distance_from_player
+        .map(|d| format!(", {} away", format_distance(d)))
+        .unwrap_or_default();
+    let location = match (&row.system, e.location) {
+        (Some(system), Some(_)) => format!(
+            "{}{distance}",
+            system.name.as_deref().unwrap_or("unnamed system")
+        ),
+        (None, Some(addr)) => format!("{:012X}{distance}", addr.packed()),
+        (_, None) => "back at the freighter".to_string(),
+    };
+    builder.push_record(["Location", &location]);
+    builder.push_record(["", ""]);
+    blocks.push(build_table(builder, &["EXPEDITION"], &table_theme, ""));
+
+    if !row.frigates.is_empty() {
+        let mut builder = Builder::default();
+        builder.push_record(["#", "Frigate", "Class", "Grade", "State"]);
+        for f in &row.frigates {
+            let state = if e.destroyed.contains(&f.frigate.index) {
+                "destroyed"
+            } else if e.damaged.contains(&f.frigate.index) {
+                "damaged"
+            } else {
+                "active"
+            };
+            builder.push_record([
+                (f.frigate.index + 1).to_string(),
+                f.frigate.label(),
+                f.frigate.class_label().to_string(),
+                f.frigate.grade_label().to_string(),
+                state.to_string(),
+            ]);
+        }
+        builder.push_record(["", "", "", "", ""]);
+        blocks.push(build_table(builder, &["FRIGATES"], &table_theme, ""));
+    }
+
+    if !e.events.is_empty() {
+        let mut builder = Builder::default();
+        builder.push_record(["#", "Event", "Decision", "Outcome", "Where"]);
+        for (i, ev) in e.events.iter().enumerate() {
+            let outcome = if i < e.resolved() {
+                if ev.success { "ok" } else { "failed" }
+            } else if i == e.next_event as usize && row.state == ExpeditionState::Waiting {
+                "waiting for you"
+            } else {
+                "pending"
+            };
+            builder.push_record([
+                (i + 1).to_string(),
+                ev.label(),
+                ev.intervention_label(),
+                outcome.to_string(),
+                row.event_places
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| "-".to_string()),
+            ]);
+        }
+        builder.push_record(["", "", "", "", ""]);
+        blocks.push(build_table(builder, &["EVENTS"], &table_theme, ""));
+    }
+
+    blocks.join("\n")
+}
+
+/// The view `fleet` was asked for, or why it cannot be shown.
+pub fn format_fleet(
+    status: &FleetStatus,
+    target: FleetTarget,
+    theme: &Theme,
+) -> Result<String, String> {
+    match target {
+        FleetTarget::Overview => Ok(format_fleet_overview(status, theme)),
+        FleetTarget::Frigates => Ok(format_frigates(status, theme)),
+        FleetTarget::Expedition(n) => status
+            .expedition(n)
+            .map(|row| format_expedition_detail(row, status.now, theme))
+            .ok_or_else(|| match status.expeditions.len() {
+                0 => "no expeditions running".to_string(),
+                len => format!("expedition {n} not found; {len} running"),
+            }),
+    }
+}
+
+/// Every frigate: class, race, grade, the four main stats and the undecoded fifth, its non-stat perks, damage, lifetime runs, and where it is.
+pub fn format_frigates(status: &FleetStatus, theme: &Theme) -> String {
+    if status.frigates.is_empty() {
+        return "  No frigates.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record([
+        "#", "Frigate", "Class", "Race", "Grade", "Cbt", "Exp", "Ind", "Trd", "St5", "Perks",
+        "Damage", "Runs", "Where",
+    ]);
+    for row in &status.frigates {
+        let f = &row.frigate;
+        let perks = f.perks();
+        let location = match row.out_on {
+            Some(n) => format!("expedition {n}"),
+            None => "home".to_string(),
+        };
+        builder.push_record([
+            (f.index + 1).to_string(),
+            f.label(),
+            f.class_label().to_string(),
+            f.race_label().to_string(),
+            f.grade_label().to_string(),
+            f.combat().to_string(),
+            f.exploration().to_string(),
+            f.industrial().to_string(),
+            f.trade().to_string(),
+            f.stat_five().to_string(),
+            perks,
+            f.damage_taken.to_string(),
+            f.expeditions.to_string(),
+            location,
+        ]);
+    }
+    builder.push_record([""; 14]);
+    build_table(builder, &["FRIGATES"], &table_theme, "Frigates")
 }
 
 /// Truncate a string to `max_len` characters, appending "..." if truncated.

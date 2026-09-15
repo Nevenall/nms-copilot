@@ -111,6 +111,123 @@ impl SaveRoot {
     }
 }
 
+impl crate::model::FleetEvent {
+    /// Convert to the core event; the location is `None` while the save holds 0.
+    pub fn to_core(&self, reality_index: u8) -> nms_core::fleet::Event {
+        nms_core::fleet::Event {
+            id: self.event_id.clone(),
+            intervention_id: self.intervention_event_id.clone(),
+            is_intervention: self.is_intervention_event,
+            success: self.success,
+            location: (self.ua.0 != 0)
+                .then(|| nms_core::GalacticAddress::from_save_ua(self.ua.0, reality_index)),
+            affected: self.affected_frigate_indices.clone(),
+        }
+    }
+}
+
+impl crate::model::FleetExpedition {
+    /// Convert to the core expedition. The save's addresses carry no galaxy, so the player's is supplied.
+    pub fn to_core(&self, reality_index: u8) -> nms_core::fleet::Expedition {
+        nms_core::fleet::Expedition {
+            seed: self.seed.value(),
+            name: self.custom_name.clone(),
+            category: nms_core::fleet::ExpeditionCategory::from_save_name(
+                &self.expedition_category.value,
+            ),
+            category_raw: self.expedition_category.value.clone(),
+            duration: nms_core::fleet::DurationClass::from_save_name(
+                &self.expedition_duration.value,
+            ),
+            duration_raw: self.expedition_duration.value.clone(),
+            start: self.start_time,
+            pause: self.pause_time,
+            speed_multiplier: self.speed_multiplier,
+            location: (self.ua.0 != 0)
+                .then(|| nms_core::GalacticAddress::from_save_ua(self.ua.0, reality_index)),
+            last_move: self.time_of_last_ua_change,
+            frigates: self.all_frigate_indices.clone(),
+            active: self.active_frigate_indices.clone(),
+            damaged: self.damaged_frigate_indices.clone(),
+            destroyed: self.destroyed_frigate_indices.clone(),
+            events: self
+                .events
+                .iter()
+                .map(|e| e.to_core(reality_index))
+                .collect(),
+            next_event: self.next_event_to_trigger,
+            intervention_pending: self.intervention_phone_call_activated,
+            successes: self.number_of_successful_events_this_expedition,
+            failures: self.number_of_failed_events_this_expedition,
+        }
+    }
+}
+
+impl crate::model::FleetFrigate {
+    /// Convert to the core frigate at `index` in the fleet list.
+    pub fn to_core(&self, index: u32, reality_index: u8) -> nms_core::fleet::Frigate {
+        nms_core::fleet::Frigate {
+            index,
+            name: self.custom_name.clone(),
+            class: nms_core::fleet::FrigateClass::from_save_name(&self.frigate_class.value),
+            class_raw: self.frigate_class.value.clone(),
+            race: self.race.value.clone(),
+            grade: nms_core::fleet::FrigateGrade::from_save_name(&self.inventory_class.value),
+            stats: self.stats.clone(),
+            traits: self.trait_ids.clone(),
+            damage_taken: self.damage_taken,
+            times_damaged: self.number_of_times_damaged,
+            repairs: self.repairs_made,
+            expeditions: self.total_number_of_expeditions,
+            successes: self.total_number_of_successful_events,
+            failures: self.total_number_of_failed_events,
+            home: (self.home_system_seed.value() != 0).then(|| {
+                nms_core::GalacticAddress::from_save_ua(
+                    self.home_system_seed.value(),
+                    reality_index,
+                )
+            }),
+        }
+    }
+}
+
+/// Object ID of a Fleet Command Room on the freighter.
+const FLEET_ROOM_ID: &str = "^FRE_ROOM_FLEET";
+
+impl SaveRoot {
+    /// The fleet of the active context: expeditions, frigates, the offer day, and the command rooms counted across the player's bases.
+    pub fn to_core_fleet(&self) -> nms_core::fleet::Fleet {
+        let ps = self.active_player_state();
+        let reality_index = ps.universe_address.reality_index;
+        let command_rooms = ps
+            .persistent_player_bases
+            .iter()
+            .flat_map(|b| b.objects.iter())
+            .filter(|o| o.object_id == FLEET_ROOM_ID)
+            .count();
+        nms_core::fleet::Fleet {
+            expeditions: ps
+                .fleet_expeditions
+                .iter()
+                .map(|e| e.to_core(reality_index))
+                .collect(),
+            frigates: ps
+                .fleet_frigates
+                .iter()
+                .enumerate()
+                .map(|(i, f)| f.to_core(u32::try_from(i).unwrap_or(u32::MAX), reality_index))
+                .collect(),
+            offer_day: ps.last_known_day,
+            launched_today: ps
+                .expedition_seeds_selected_today
+                .iter()
+                .map(|s| s.value())
+                .collect(),
+            command_rooms: u32::try_from(command_rooms).unwrap_or(u32::MAX),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,6 +436,116 @@ mod tests {
         let save: SaveRoot = serde_json::from_str(json).unwrap();
         let state = save.to_core_player_state();
         assert!(state.previous_address.is_none());
+    }
+
+    #[test]
+    fn to_core_fleet_converts_expeditions_frigates_and_rooms() {
+        let json = r#"{
+            "Version": 4720,
+            "Platform": "Mac|Final",
+            "ActiveContext": "Main",
+            "CommonStateData": {"SaveName": "test"},
+            "BaseContext": {
+                "GameMode": 1,
+                "PlayerStateData": {
+                    "UniverseAddress": {"RealityIndex": 0, "GalacticAddress": {"VoxelX": 186, "VoxelY": 2, "VoxelZ": -1760, "SolarSystemIndex": 122, "PlanetIndex": 0}},
+                    "Units": 0, "Nanites": 0, "Specials": 0,
+                    "PersistentPlayerBases": [
+                        {"GalacticAddress": "0x00100000000064", "Name": "Home", "BaseType": {"PersistentBaseTypes": "FreighterBase"},
+                         "Objects": [
+                            {"ObjectID": "^FRE_ROOM_FLEET", "Timestamp": 0, "UserData": 0},
+                            {"ObjectID": "^FRE_ROOM_FLEET", "Timestamp": 0, "UserData": 0},
+                            {"ObjectID": "^FRE_ROOM_STORE0", "Timestamp": 0, "UserData": 0}
+                         ]}
+                    ],
+                    "FleetExpeditions": [{
+                        "Seed": [true, "0x5F98B405C7B30D18"],
+                        "ExpeditionCategory": {"ExpeditionCategory": "Diplomacy"},
+                        "ExpeditionDuration": {"ExpeditionDuration": "VeryLong"},
+                        "StartTime": 1789344506, "PauseTime": 1789396923, "SpeedMultiplier": 1.0,
+                        "UA": "0x2E00FC956DEC", "TimeOfLastUAChange": 1789398099,
+                        "AllFrigateIndices": [0], "ActiveFrigateIndices": [0], "DamagedFrigateIndices": [], "DestroyedFrigateIndices": [],
+                        "Events": [
+                            {"EventID": "^DIPLOMATIC_2", "IsInterventionEvent": false, "InterventionEventID": "^", "Success": true, "UA": "0x2E00FC956DEC"},
+                            {"EventID": "^DIPLOMATIC_2", "IsInterventionEvent": true, "InterventionEventID": "^INT_TRADING_CHOOSE_FUND", "Success": false, "UA": 0}
+                        ],
+                        "NextEventToTrigger": 1,
+                        "NumberOfSuccessfulEventsThisExpedition": 1, "NumberOfFailedEventsThisExpedition": 0,
+                        "InterventionPhoneCallActivated": true
+                    }],
+                    "FleetFrigates": [{
+                        "CustomName": "SV-8 Zuhotoh",
+                        "FrigateClass": {"FrigateClass": "Combat"},
+                        "Race": {"AlienRace": "Traders"},
+                        "InventoryClass": {"InventoryClass": "S"},
+                        "Stats": [33, 14, 8, 10, 10, 0, 0, 0, 0, 0, 0],
+                        "TraitIDs": ["^COMBAT_PRI", "^", "^", "^", "^"],
+                        "NumberOfTimesDamaged": 3,
+                        "TotalNumberOfExpeditions": 34, "TotalNumberOfSuccessfulEvents": 286, "TotalNumberOfFailedEvents": 9,
+                        "HomeSystemSeed": [true, "0x2E00FC956DEC"]
+                    }],
+                    "ExpeditionSeedsSelectedToday": ["0x5F98B405C7B30D18"],
+                    "LastKnownDay": 20710
+                }
+            },
+            "ExpeditionContext": {"GameMode": 6, "PlayerStateData": {"UniverseAddress": {"RealityIndex": 0, "GalacticAddress": {"VoxelX": 0, "VoxelY": 0, "VoxelZ": 0, "SolarSystemIndex": 0, "PlanetIndex": 0}}, "Units": 0, "Nanites": 0, "Specials": 0, "PersistentPlayerBases": []}},
+            "DiscoveryManagerData": {"DiscoveryData-v1": {"ReserveStore": 0, "ReserveManaged": 0, "Store": {"Record": []}}}
+        }"#;
+        let save = crate::parse_save(json.as_bytes()).unwrap();
+        let fleet = save.to_core_fleet();
+        assert_eq!(fleet.command_rooms, 2);
+        assert_eq!(fleet.offer_day, 20710);
+        assert_eq!(fleet.launched_today, vec![0x5F98_B405_C7B3_0D18]);
+        assert_eq!(fleet.expeditions.len(), 1);
+        let e = &fleet.expeditions[0];
+        assert_eq!(e.seed, 0x5F98_B405_C7B3_0D18);
+        assert_eq!(
+            e.category,
+            Some(nms_core::fleet::ExpeditionCategory::Diplomacy)
+        );
+        assert_eq!(e.duration, Some(nms_core::fleet::DurationClass::VeryLong));
+        assert_eq!(e.start, 1789344506);
+        assert_eq!(e.pause, 1789396923);
+        assert_eq!(e.last_move, 1789398099);
+        let loc = e.location.expect("fleet location");
+        assert_eq!(
+            (
+                loc.voxel_x(),
+                loc.voxel_y(),
+                loc.voxel_z(),
+                loc.solar_system_index()
+            ),
+            (-532, -4, -1706, 46)
+        );
+        assert_eq!(e.frigates, vec![0]);
+        assert_eq!(e.events.len(), 2);
+        assert!(e.events[0].location.is_some());
+        assert!(e.events[1].location.is_none());
+        assert!(e.events[1].is_intervention);
+        assert!(e.is_waiting());
+        let f = &fleet.frigates[0];
+        assert_eq!(f.index, 0);
+        assert_eq!(f.name, "SV-8 Zuhotoh");
+        assert_eq!(f.class, Some(nms_core::fleet::FrigateClass::Combat));
+        assert_eq!(f.grade, Some(nms_core::fleet::FrigateGrade::S));
+        assert_eq!(f.race, "Traders");
+        assert_eq!(f.combat(), 33);
+        assert_eq!(f.times_damaged, 3);
+        assert_eq!(f.successes, 286);
+        assert_eq!(f.home.map(|h| h.solar_system_index()), Some(46));
+    }
+
+    #[test]
+    fn to_core_fleet_without_fleet_fields_is_empty() {
+        let json = r#"{
+            "Version": 4720, "Platform": "Mac|Final", "ActiveContext": "Main",
+            "CommonStateData": {"SaveName": "test"},
+            "BaseContext": {"GameMode": 1, "PlayerStateData": {"UniverseAddress": {"RealityIndex": 0, "GalacticAddress": {"VoxelX": 0, "VoxelY": 0, "VoxelZ": 0, "SolarSystemIndex": 1, "PlanetIndex": 0}}, "Units": 0, "Nanites": 0, "Specials": 0, "PersistentPlayerBases": []}},
+            "ExpeditionContext": {"GameMode": 6, "PlayerStateData": {"UniverseAddress": {"RealityIndex": 0, "GalacticAddress": {"VoxelX": 0, "VoxelY": 0, "VoxelZ": 0, "SolarSystemIndex": 0, "PlanetIndex": 0}}, "Units": 0, "Nanites": 0, "Specials": 0, "PersistentPlayerBases": []}},
+            "DiscoveryManagerData": {"DiscoveryData-v1": {"ReserveStore": 0, "ReserveManaged": 0, "Store": {"Record": []}}}
+        }"#;
+        let save = crate::parse_save(json.as_bytes()).unwrap();
+        assert!(save.to_core_fleet().is_empty());
     }
 
     #[test]

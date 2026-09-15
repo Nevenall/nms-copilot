@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use nms_core::address::GalacticAddress;
+use nms_core::fleet::Fleet;
 use nms_core::player::PlayerBase;
 use nms_core::system::{Planet, System, SystemId};
 use nms_graph::extract::extract_systems;
@@ -24,6 +25,8 @@ pub struct SaveSnapshot {
     pub bases: HashMap<String, PlayerBase>,
     /// Player's current galactic address.
     pub player_address: GalacticAddress,
+    /// The fleet and its expeditions.
+    pub fleet: Fleet,
 }
 
 impl SaveSnapshot {
@@ -54,12 +57,14 @@ impl SaveSnapshot {
         }
 
         let player_address = save.to_core_player_state().current_address;
+        let fleet = save.to_core_fleet();
 
         Self {
             systems: extracted,
             planets,
             bases,
             player_address,
+            fleet,
         }
     }
 }
@@ -136,6 +141,13 @@ mod tests {
         let snapshot = SaveSnapshot::from_save(&save);
         assert_eq!(snapshot.bases.len(), 1);
         assert!(snapshot.bases.contains_key("home base"));
+    }
+
+    #[test]
+    fn test_snapshot_from_save_without_fleet_is_empty_fleet() {
+        let save = minimal_save();
+        let snapshot = SaveSnapshot::from_save(&save);
+        assert!(snapshot.fleet.is_empty());
     }
 
     #[test]

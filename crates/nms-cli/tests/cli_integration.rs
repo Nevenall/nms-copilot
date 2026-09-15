@@ -526,7 +526,7 @@ fn test_nms_raw_keys_lists_children() {
         .assert()
         .success()
         .stdout(predicate::str::contains("PersistentPlayerBases"))
-        .stdout(predicate::str::contains("array (2 items)"));
+        .stdout(predicate::str::contains("array (3 items)"));
 }
 
 #[test]
@@ -625,4 +625,67 @@ fn test_nms_base_detail_width_places_sections_side_by_side() {
     let title_line = stdout.lines().find(|l| l.contains("BASE")).unwrap();
     assert!(title_line.contains("CROPS"), "{stdout}");
     assert!(title_line.contains("EXTRACTION"), "{stdout}");
+}
+
+#[test]
+fn test_nms_fleet_overview_lists_expeditions_and_navigator() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("FLEET"))
+        .stdout(predicate::str::contains("Trade"))
+        .stdout(predicate::str::contains("Very long"))
+        .stdout(predicate::str::contains("2 / 3"))
+        .stdout(predicate::str::contains("waiting for you"))
+        .stdout(predicate::str::contains("Navigator: 5 new offers waiting"))
+        .stdout(predicate::str::contains("1 of 2 command rooms free"))
+        .stdout(predicate::str::contains("1 of 4 frigates at home"));
+}
+
+#[test]
+fn test_nms_fleet_expedition_detail_shows_sections() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "1", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("EXPEDITION"))
+        .stdout(predicate::str::contains("FRIGATES"))
+        .stdout(predicate::str::contains("EVENTS"))
+        .stdout(predicate::str::contains("Combat frigate #1"))
+        .stdout(predicate::str::contains("trading choose fund"))
+        .stdout(predicate::str::contains("waiting for you"))
+        .stdout(predicate::str::contains("unnamed system"))
+        .stdout(predicate::str::contains("Location"));
+}
+
+#[test]
+fn test_nms_fleet_frigates_lists_every_frigate() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "frigates", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("FRIGATES"))
+        .stdout(predicate::str::contains("Support frigate #4"))
+        .stdout(predicate::str::contains("expedition 1"))
+        .stdout(predicate::str::contains("home"))
+        .stdout(predicate::str::contains("Korvax"));
+}
+
+#[test]
+fn test_nms_fleet_bad_target_fails() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "9", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("expedition 9 not found"));
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "ships", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("expected an expedition number"));
 }

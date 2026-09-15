@@ -81,6 +81,22 @@ pub struct PlayerStateData {
 
     #[serde(default)]
     pub time_alive: u64,
+
+    /// Running frigate expeditions; a debriefed expedition is removed.
+    #[serde(default)]
+    pub fleet_expeditions: Vec<FleetExpedition>,
+
+    /// Every frigate in the fleet, in the order expeditions index them.
+    #[serde(default)]
+    pub fleet_frigates: Vec<FleetFrigate>,
+
+    /// Seeds of the expeditions launched on `last_known_day`; cleared when the day rolls on game load.
+    #[serde(default)]
+    pub expedition_seeds_selected_today: Vec<SeedPair>,
+
+    /// UTC day number, `floor(unix / 86400)`, of the current offer day.
+    #[serde(default)]
+    pub last_known_day: i64,
 }
 
 /// A teleporter destination recorded when the player docks at a station or visits a base.
@@ -212,6 +228,97 @@ impl GalacticAddressObject {
             self.planet_index,
             reality_index,
         )
+    }
+}
+
+/// A 64-bit value written as a hex string `"0x..."` or a bare integer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct HexU64(pub u64);
+
+impl<'de> Deserialize<'de> for HexU64 {
+    fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = HexU64;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a hex string like \"0x...\" or an integer")
+            }
+
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(HexU64(v))
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(HexU64(v as u64))
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let hex = v
+                    .strip_prefix("0x")
+                    .or_else(|| v.strip_prefix("0X"))
+                    .unwrap_or(v);
+                u64::from_str_radix(hex, 16)
+                    .map(HexU64)
+                    .map_err(|_| de::Error::custom(format!("invalid hex value: {v}")))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+/// A seed as the save writes it: usually `[true, "0x5F98B405C7B30D18"]`, a flag and the value, but `ExpeditionSeedsSelectedToday` lists bare values. Either form is accepted, and the value may be a hex string or an integer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct SeedPair(pub bool, pub u64);
+
+impl SeedPair {
+    /// The seed value.
+    pub fn value(&self) -> u64 {
+        self.1
+    }
+}
+
+impl<'de> Deserialize<'de> for SeedPair {
+    fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = SeedPair;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a seed value, or a list of a flag and a seed value")
+            }
+
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(SeedPair(false, v))
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(SeedPair(false, v as u64))
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                serde_json::from_value::<HexU64>(serde_json::Value::String(v.to_string()))
+                    .map(|h| SeedPair(false, h.0))
+                    .map_err(de::Error::custom)
+            }
+
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut pair = SeedPair::default();
+                while let Some(item) = seq.next_element::<serde_json::Value>()? {
+                    match item {
+                        serde_json::Value::Bool(flag) => pair.0 = flag,
+                        serde_json::Value::Null => {}
+                        other => {
+                            pair.1 = serde_json::from_value::<HexU64>(other)
+                                .map_err(de::Error::custom)?
+                                .0;
+                        }
+                    }
+                }
+                Ok(pair)
+            }
+        }
+        deserializer.deserialize_any(Visitor)
     }
 }
 
@@ -474,6 +581,182 @@ impl BaseObject {
             user_data: self.user_data,
         }
     }
+}
+
+/// One running fleet expedition.
+///
+/// Only the fields the model uses are kept. Timestamps are Unix seconds; `UA` is a save-layout universe address (0 once the fleet is back); the frigate index lists point into `FleetFrigates`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct FleetExpedition {
+    #[serde(default)]
+    pub seed: SeedPair,
+
+    #[serde(default)]
+    pub custom_name: String,
+
+    #[serde(default)]
+    pub expedition_category: ExpeditionCategoryWrapper,
+
+    #[serde(default)]
+    pub expedition_duration: ExpeditionDurationWrapper,
+
+    #[serde(default)]
+    pub start_time: i64,
+
+    #[serde(default)]
+    pub pause_time: i64,
+
+    #[serde(default = "default_speed_multiplier")]
+    pub speed_multiplier: f64,
+
+    #[serde(rename = "UA", default)]
+    pub ua: HexU64,
+
+    #[serde(rename = "TimeOfLastUAChange", default)]
+    pub time_of_last_ua_change: i64,
+
+    #[serde(default)]
+    pub all_frigate_indices: Vec<u32>,
+
+    #[serde(default)]
+    pub active_frigate_indices: Vec<u32>,
+
+    #[serde(default)]
+    pub damaged_frigate_indices: Vec<u32>,
+
+    #[serde(default)]
+    pub destroyed_frigate_indices: Vec<u32>,
+
+    #[serde(default)]
+    pub events: Vec<FleetEvent>,
+
+    #[serde(default)]
+    pub next_event_to_trigger: u32,
+
+    #[serde(default)]
+    pub number_of_successful_events_this_expedition: u32,
+
+    #[serde(default)]
+    pub number_of_failed_events_this_expedition: u32,
+
+    #[serde(default)]
+    pub intervention_phone_call_activated: bool,
+}
+
+fn default_speed_multiplier() -> f64 {
+    1.0
+}
+
+/// One event on an expedition's route.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct FleetEvent {
+    #[serde(rename = "EventID", default)]
+    pub event_id: String,
+
+    #[serde(default)]
+    pub is_intervention_event: bool,
+
+    #[serde(rename = "InterventionEventID", default)]
+    pub intervention_event_id: String,
+
+    #[serde(default)]
+    pub success: bool,
+
+    #[serde(rename = "UA", default)]
+    pub ua: HexU64,
+
+    #[serde(default)]
+    pub affected_frigate_indices: Vec<u32>,
+}
+
+/// One frigate in the fleet.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct FleetFrigate {
+    #[serde(default)]
+    pub custom_name: String,
+
+    #[serde(default)]
+    pub frigate_class: FrigateClassWrapper,
+
+    #[serde(default)]
+    pub race: AlienRaceWrapper,
+
+    #[serde(default)]
+    pub inventory_class: InventoryClassWrapper,
+
+    #[serde(default)]
+    pub stats: Vec<u32>,
+
+    #[serde(rename = "TraitIDs", default)]
+    pub trait_ids: Vec<String>,
+
+    #[serde(default)]
+    pub damage_taken: u32,
+
+    #[serde(default)]
+    pub number_of_times_damaged: u32,
+
+    #[serde(default)]
+    pub repairs_made: u32,
+
+    #[serde(default)]
+    pub total_number_of_expeditions: u32,
+
+    #[serde(default)]
+    pub total_number_of_successful_events: u32,
+
+    #[serde(default)]
+    pub total_number_of_failed_events: u32,
+
+    /// Not a seed: the save-layout address of the system the frigate was recruited in.
+    #[serde(default)]
+    pub home_system_seed: SeedPair,
+}
+
+/// Wrapper for `{"ExpeditionCategory": "Diplomacy"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct ExpeditionCategoryWrapper {
+    #[serde(rename = "ExpeditionCategory", default)]
+    pub value: String,
+}
+
+/// Wrapper for `{"ExpeditionDuration": "VeryLong"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct ExpeditionDurationWrapper {
+    #[serde(rename = "ExpeditionDuration", default)]
+    pub value: String,
+}
+
+/// Wrapper for `{"FrigateClass": "Combat"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct FrigateClassWrapper {
+    #[serde(rename = "FrigateClass", default)]
+    pub value: String,
+}
+
+/// Wrapper for `{"AlienRace": "Traders"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct AlienRaceWrapper {
+    #[serde(rename = "AlienRace", default)]
+    pub value: String,
+}
+
+/// Wrapper for `{"InventoryClass": "S"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct InventoryClassWrapper {
+    #[serde(rename = "InventoryClass", default)]
+    pub value: String,
 }
 
 /// Wrapper for `{"PersistentBaseTypes": "HomePlanetBase"}`.
@@ -856,6 +1139,119 @@ mod tests {
         assert_eq!(raw.object_id, "^U_SILO_S");
         assert_eq!(raw.timestamp, 1789279852);
         assert_eq!(raw.user_data >> 32, 1_440_000);
+    }
+
+    #[test]
+    fn parse_hex_u64_and_seed_pairs() {
+        let v: HexU64 = serde_json::from_str(r#""0x5F98B405C7B30D18""#).unwrap();
+        assert_eq!(v.0, 0x5F98_B405_C7B3_0D18);
+        let v: HexU64 = serde_json::from_str("333156184008389").unwrap();
+        assert_eq!(v.0, 333_156_184_008_389);
+        let s: SeedPair = serde_json::from_str(r#"[true, "0x5F98B405C7B30D18"]"#).unwrap();
+        assert!(s.0);
+        assert_eq!(s.value(), 0x5F98_B405_C7B3_0D18);
+        let s: SeedPair = serde_json::from_str("[false, 42]").unwrap();
+        assert_eq!(s.value(), 42);
+        let s: SeedPair = serde_json::from_str(r#"["0x2E00FC956DEC"]"#).unwrap();
+        assert_eq!(s.value(), 0x2E00_FC95_6DEC);
+        // The day's launch list writes bare values.
+        let s: SeedPair = serde_json::from_str(r#""0x5F98B405C7B30D1B""#).unwrap();
+        assert_eq!(s.value(), 0x5F98_B405_C7B3_0D1B);
+        let s: SeedPair = serde_json::from_str("7").unwrap();
+        assert_eq!(s.value(), 7);
+        let seeds: Vec<SeedPair> = serde_json::from_str("[]").unwrap();
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn parse_fleet_expedition_fields() {
+        let json = r#"{
+            "Seed": [true, "0x5F98B405C7B30D18"],
+            "CustomName": "",
+            "ExpeditionCategory": {"ExpeditionCategory": "Diplomacy"},
+            "ExpeditionDuration": {"ExpeditionDuration": "VeryLong"},
+            "StartTime": 1789344506,
+            "PauseTime": 1789396923,
+            "SpeedMultiplier": 1.0,
+            "UA": 333156184008389,
+            "TimeOfLastUAChange": 1789398099,
+            "AllFrigateIndices": [9, 12, 20, 22, 24],
+            "ActiveFrigateIndices": [22, 20, 9, 12, 24],
+            "DamagedFrigateIndices": [],
+            "DestroyedFrigateIndices": [],
+            "Events": [
+                {"EventID": "^DIPLOMATIC_2", "IsInterventionEvent": false, "InterventionEventID": "^INT_TRADING_CHOOSE_FUND", "Success": true, "UA": 333156184008389, "AffectedFrigateIndices": []},
+                {"EventID": "^DIPLOMATIC_2", "IsInterventionEvent": true, "InterventionEventID": "^INT_TRADING_CHOOSE_FUND", "Success": false, "UA": 0, "AffectedFrigateIndices": []}
+            ],
+            "NextEventToTrigger": 1,
+            "NumberOfSuccessfulEventsThisExpedition": 1,
+            "NumberOfFailedEventsThisExpedition": 0,
+            "InterventionPhoneCallActivated": true,
+            "InterventionEventMissionID": "^",
+            "Powerups": ["^", "^", "^"]
+        }"#;
+        let e: FleetExpedition = serde_json::from_str(json).unwrap();
+        assert_eq!(e.seed.value(), 0x5F98_B405_C7B3_0D18);
+        assert_eq!(e.expedition_category.value, "Diplomacy");
+        assert_eq!(e.expedition_duration.value, "VeryLong");
+        assert_eq!(e.start_time, 1789344506);
+        assert_eq!(e.pause_time, 1789396923);
+        assert_eq!(e.ua.0, 333156184008389);
+        assert_eq!(e.time_of_last_ua_change, 1789398099);
+        assert_eq!(e.all_frigate_indices, vec![9, 12, 20, 22, 24]);
+        assert_eq!(e.events.len(), 2);
+        assert!(e.events[1].is_intervention_event);
+        assert_eq!(
+            e.events[1].intervention_event_id,
+            "^INT_TRADING_CHOOSE_FUND"
+        );
+        assert_eq!(e.events[1].ua.0, 0);
+        assert_eq!(e.next_event_to_trigger, 1);
+        assert!(e.intervention_phone_call_activated);
+        let bare: FleetExpedition = serde_json::from_str("{}").unwrap();
+        assert_eq!(bare.speed_multiplier, 1.0);
+    }
+
+    #[test]
+    fn parse_fleet_frigate_and_player_state_fleet_fields() {
+        let json = r#"{
+            "Units": 5,
+            "FleetFrigates": [{
+                "CustomName": "",
+                "FrigateClass": {"FrigateClass": "Combat"},
+                "Race": {"AlienRace": "Traders"},
+                "InventoryClass": {"InventoryClass": "S"},
+                "Stats": [33, 14, 8, 10, 10, 0, 0, 0, 0, 0, 0],
+                "TraitIDs": ["^COMBAT_PRI", "^EXPLORE_TER_4", "^COMBAT_SEC_3", "^TRADING_TER_5", "^COMBAT_SEC_1"],
+                "DamageTaken": 0,
+                "NumberOfTimesDamaged": 3,
+                "RepairsMade": 0,
+                "TotalNumberOfExpeditions": 34,
+                "TotalNumberOfSuccessfulEvents": 286,
+                "TotalNumberOfFailedEvents": 9,
+                "HomeSystemSeed": [true, "0x2E00FC956DEC"]
+            }],
+            "ExpeditionSeedsSelectedToday": ["0x5F98B405C7B30D1B"],
+            "LastKnownDay": 20711
+        }"#;
+        let ps: PlayerStateData = serde_json::from_str(json).unwrap();
+        assert_eq!(ps.fleet_frigates.len(), 1);
+        let f = &ps.fleet_frigates[0];
+        assert_eq!(f.frigate_class.value, "Combat");
+        assert_eq!(f.race.value, "Traders");
+        assert_eq!(f.inventory_class.value, "S");
+        assert_eq!(f.stats[0], 33);
+        assert_eq!(f.trait_ids.len(), 5);
+        assert_eq!(f.number_of_times_damaged, 3);
+        assert_eq!(f.total_number_of_successful_events, 286);
+        assert_eq!(f.home_system_seed.value(), 0x2E00_FC95_6DEC);
+        assert_eq!(ps.expedition_seeds_selected_today.len(), 1);
+        assert_eq!(
+            ps.expedition_seeds_selected_today[0].value(),
+            0x5F98_B405_C7B3_0D1B
+        );
+        assert_eq!(ps.last_known_day, 20711);
+        assert!(ps.fleet_expeditions.is_empty());
     }
 
     #[test]
