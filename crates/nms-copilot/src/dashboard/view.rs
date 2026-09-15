@@ -2,14 +2,14 @@
 //!
 //! Building it is the only place the dashboard reads the model; drawing it is the only place ratatui appears. The redraw rule compares views, so anything that must not cause a redraw must not be in the view: every time shown here is at the coarse granularity of [`format_duration_coarse`].
 
-use std::collections::HashSet;
-
+use nms_core::address::{GalacticAddress, PortalAddress};
 use nms_core::fleet::ExpeditionState;
+use nms_core::system::SystemId;
 use nms_graph::GalaxyModel;
-use nms_query::base::{Alert, BaseQuery, BaseStatus, execute_base};
+use nms_query::base::{BaseQuery, BaseStatus, execute_base};
 use nms_query::display::{
-    base_type_label, crops_cell, extraction_cell, format_ago, format_clock, format_duration_coarse,
-    power_cell,
+    base_type_label, crops_cell, extraction_cell, format_ago, format_clock, format_distance,
+    format_duration_coarse, power_cell, thousands,
 };
 use nms_query::fleet::{ExpeditionRow, FleetStatus, execute_fleet};
 
@@ -29,7 +29,7 @@ pub struct View {
     /// Galaxy, position, the last save write, and what is watched.
     pub header: String,
     pub keys: String,
-    pub alerts: Vec<AlertLine>,
+    pub player: PlayerPanel,
     pub bases: Vec<BaseRow>,
     /// `None` when the save has no freighter.
     pub fleet: Option<FleetPanel>,
@@ -37,14 +37,32 @@ pub struct View {
     pub log: Vec<String>,
 }
 
-/// One alert; `fresh` marks one that arrived since the last keypress.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AlertLine {
-    pub fresh: bool,
-    pub text: String,
+/// What the save knows about the player: where they are, what they are carrying, and how much of the galaxy they have seen.
+///
+/// The facts are laid out down the left column and then down the right, so the first of each half is the one a squeezed screen keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlayerPanel {
+    pub facts: Vec<Fact>,
+}
+
+/// One labelled detail about the player.
+pub type Fact = (String, String);
+
+impl PlayerPanel {
+    /// Rows the facts take when laid out two to a line.
+    pub fn rows(&self) -> usize {
+        self.facts.len().div_ceil(2)
+    }
+
+    /// The pair on line `row`: the left fact and, when there is one, the right.
+    pub fn line(&self, row: usize) -> (Option<&Fact>, Option<&Fact>) {
+        (self.facts.get(row), self.facts.get(self.rows() + row))
+    }
 }
 
 /// One base, carrying the same cells the `base` overview prints, plus the time to the next harvest.
+///
+/// The `_wants_you` flags mark what the alerts used to say in a section of their own: a cell carrying one is drawn in the attention colour.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseRow {
     pub name: String,
@@ -52,10 +70,14 @@ pub struct BaseRow {
     pub kind: String,
     /// Plants ready of plants planted.
     pub crops: String,
+    /// Something is ready to harvest.
+    pub crops_want_you: bool,
     /// When the next batch comes ready, at the coarse granularity.
     pub next: String,
     /// Units stored of capacity across the base's extraction networks, with how many are full.
     pub extraction: String,
+    /// A network is at capacity and stops producing until it is emptied.
+    pub extraction_wants_you: bool,
     /// Batteries and generators.
     pub power: String,
 }
@@ -65,6 +87,8 @@ pub struct BaseRow {
 pub struct FleetPanel {
     pub rows: Vec<FleetRow>,
     pub offers: String,
+    /// The offer day has rolled and a fresh set waits at the Navigator.
+    pub offers_want_you: bool,
     pub rooms: String,
 }
 
@@ -77,29 +101,19 @@ pub struct FleetRow {
     pub events: String,
     pub elapsed: String,
     pub status: String,
+    /// The expedition is holding for a decision or back and awaiting its debrief.
+    pub status_wants_you: bool,
 }
 
-/// Build the view at `now`. Alerts whose key is not in `seen` are marked fresh.
-pub fn build(
-    model: &GalaxyModel,
-    session: &SessionState,
-    seen: &HashSet<String>,
-    now: i64,
-) -> View {
+/// Build the view at `now`.
+pub fn build(model: &GalaxyModel, session: &SessionState, now: i64) -> View {
     let bases = execute_base(model, &BaseQuery::default(), now)
         .unwrap_or_default()
         .iter()
         .map(base_row)
         .collect();
     let fleet = execute_fleet(model, now).ok().map(|s| fleet_panel(&s));
-    let alerts = session
-        .alerts
-        .iter()
-        .map(|alert| AlertLine {
-            fresh: !seen.contains(&alert.key()),
-            text: alert.text(),
-        })
-        .collect();
+    let player = player_panel(model);
     let log = session
         .log()
         .map(|line| format!("{}  {}", format_clock(line.at), line.text))
@@ -108,16 +122,11 @@ pub fn build(
         title: "NMS Copilot".to_string(),
         header: header(model, session, now),
         keys: KEYS.to_string(),
-        alerts,
+        player,
         bases,
         fleet,
         log,
     }
-}
-
-/// The keys of the current alerts, for the caller's `seen` set.
-pub fn alert_keys(session: &SessionState) -> HashSet<String> {
-    session.alerts.iter().map(Alert::key).collect()
 }
 
 fn header(model: &GalaxyModel, session: &SessionState, now: i64) -> String {
@@ -141,6 +150,76 @@ fn header(model: &GalaxyModel, session: &SessionState, now: i64) -> String {
         watching,
     ]
     .join(" \u{00B7} ")
+}
+
+/// The player's own details, in the order they are shown.
+fn player_panel(model: &GalaxyModel) -> PlayerPanel {
+    let known = (
+        "Known".to_string(),
+        format!(
+            "{} systems \u{00B7} {} planets",
+            model.system_count(),
+            model.planet_count()
+        ),
+    );
+    let bases = ("Bases".to_string(), model.base_count().to_string());
+    let Some(state) = model.player_state.as_ref() else {
+        return PlayerPanel {
+            facts: vec![known, bases],
+        };
+    };
+    let here = state.current_address;
+    let system = match model.system(&SystemId::from_address(&here)) {
+        Some(system) => {
+            let name = system
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("system {}", here.solar_system_index()));
+            let planets = system.planets.len();
+            format!(
+                "{name} \u{00B7} {planets} planet{}",
+                if planets == 1 { "" } else { "s" }
+            )
+        }
+        None => "not in the atlas".to_string(),
+    };
+    let freighter = match state.freighter_address {
+        Some(addr) if addr.same_system(&here) => "in this system".to_string(),
+        Some(addr) => system_label(model, &addr),
+        None => "-".to_string(),
+    };
+    let from = match state.previous_address {
+        Some(addr) => system_label(model, &addr),
+        None => "-".to_string(),
+    };
+    PlayerPanel {
+        facts: vec![
+            ("System".to_string(), system),
+            (
+                "Address".to_string(),
+                PortalAddress::from_galactic_address(&here).to_hex_string(),
+            ),
+            (
+                "From centre".to_string(),
+                format_distance(here.distance_to_core_ly()),
+            ),
+            ("Warped from".to_string(), from),
+            known,
+            ("Units".to_string(), thousands(state.units)),
+            ("Nanites".to_string(), thousands(state.nanites)),
+            ("Quicksilver".to_string(), thousands(state.quicksilver)),
+            ("Freighter".to_string(), freighter),
+            bases,
+        ],
+    }
+}
+
+/// A system's name, or its portal address when the atlas has no name for it.
+fn system_label(model: &GalaxyModel, addr: &GalacticAddress) -> String {
+    model
+        .system(&SystemId::from_address(addr))
+        .and_then(|system| system.name.clone())
+        .unwrap_or_else(|| PortalAddress::from_galactic_address(addr).to_hex_string())
 }
 
 fn whereabouts(model: &GalaxyModel, session: &SessionState) -> String {
@@ -177,8 +256,10 @@ fn base_row(status: &BaseStatus) -> BaseRow {
         name: truncate(&name, NAME_WIDTH),
         kind: base_type_label(&status.base.base_type),
         crops: crops_cell(status),
+        crops_want_you: status.crops_ready > 0,
         next,
         extraction: extraction_cell(status),
+        extraction_wants_you: status.full_networks() > 0,
         power: power_cell(&status.power),
     }
 }
@@ -210,6 +291,7 @@ fn fleet_panel(status: &FleetStatus) -> FleetPanel {
     FleetPanel {
         rows,
         offers,
+        offers_want_you: status.offers.refreshed && status.offers.day > 0,
         rooms,
     }
 }
@@ -246,6 +328,10 @@ fn fleet_row(row: &ExpeditionRow) -> FleetRow {
         events: format!("{}/{}", row.expedition.resolved(), row.expedition.total()),
         elapsed: format_duration_coarse(row.elapsed_secs),
         status,
+        status_wants_you: matches!(
+            row.state,
+            ExpeditionState::Waiting | ExpeditionState::Complete
+        ),
     }
 }
 
@@ -281,11 +367,11 @@ mod tests {
     }
 
     #[test]
-    fn test_build_shows_bases_fleet_alerts_and_log() {
+    fn test_build_shows_bases_fleet_and_log() {
         let model = fixture();
         let mut session = session_at(&model, NOW);
         session.record(NOW - 60, "Warped: Here -> There");
-        let view = build(&model, &session, &HashSet::new(), NOW);
+        let view = build(&model, &session, NOW);
 
         assert_eq!(view.title, "NMS Copilot");
         assert_eq!(view.keys, KEYS);
@@ -345,10 +431,6 @@ mod tests {
             fleet.rooms
         );
 
-        assert!(!view.alerts.is_empty());
-        assert!(view.alerts.iter().all(|a| a.fresh), "nothing seen yet");
-        assert!(view.alerts.iter().any(|a| a.text.contains("expedition 1")));
-
         assert_eq!(view.log.len(), 1);
         assert!(
             view.log[0].ends_with("  Warped: Here -> There"),
@@ -358,23 +440,87 @@ mod tests {
     }
 
     #[test]
-    fn test_seen_alerts_lose_their_marker() {
+    fn test_player_facts_read_from_the_save() {
         let model = fixture();
         let session = session_at(&model, NOW);
-        let view = build(&model, &session, &alert_keys(&session), NOW);
-        assert!(!view.alerts.is_empty());
-        assert!(view.alerts.iter().all(|a| !a.fresh));
+        let view = build(&model, &session, NOW);
+        let facts: Vec<(&str, &str)> = view
+            .player
+            .facts
+            .iter()
+            .map(|(label, value)| (label.as_str(), value.as_str()))
+            .collect();
+
+        let of = |label: &str| {
+            facts
+                .iter()
+                .find(|(name, _)| *name == label)
+                .unwrap_or_else(|| panic!("no {label} fact in {facts:?}"))
+                .1
+        };
+        assert_eq!(of("Units"), "25,000,000");
+        assert_eq!(of("Nanites"), "50,000");
+        assert_eq!(of("Quicksilver"), "1,500");
+        assert_eq!(
+            of("Warped from"),
+            "-",
+            "the fixture records no previous system"
+        );
+        assert_eq!(of("Freighter"), "-", "and no freighter");
+        assert_eq!(of("Bases"), "3");
+        assert!(of("Known").ends_with("planets"), "{}", of("Known"));
+        assert!(of("From centre").ends_with("ly"), "{}", of("From centre"));
+        assert_eq!(of("Address").len(), 12, "a portal address is twelve digits");
+
+        // Ten facts make five lines, and the first of each half share the top one.
+        assert_eq!(view.player.rows(), 5);
+        let (left, right) = view.player.line(0);
+        assert_eq!(left.map(|f| f.0.as_str()), Some("System"));
+        assert_eq!(right.map(|f| f.0.as_str()), Some("Units"));
+    }
+
+    #[test]
+    fn test_a_model_with_no_player_still_says_what_it_knows() {
+        let model = GalaxyModel::new();
+        let session = SessionState::from_model(&model);
+        let view = build(&model, &session, NOW);
+        let labels: Vec<&str> = view
+            .player
+            .facts
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect();
+        assert_eq!(labels, vec!["Known", "Bases"]);
+    }
+
+    #[test]
+    fn test_what_wants_the_player_is_flagged_on_the_cell() {
+        let model = fixture();
+        let session = session_at(&model, NOW);
+        let view = build(&model, &session, NOW);
+
+        let haven = &view.bases[0];
+        assert!(haven.crops_want_you, "Lush Haven has plants ready at NOW");
+        assert!(haven.extraction_wants_you, "and a network at capacity");
+        let outpost = &view.bases[1];
+        assert!(!outpost.crops_want_you);
+        assert!(!outpost.extraction_wants_you);
+
+        let fleet = view.fleet.as_ref().expect("the fixture has a freighter");
+        assert!(
+            fleet.rows[0].status_wants_you,
+            "the expedition is holding for a decision"
+        );
     }
 
     #[test]
     fn test_view_is_stable_across_seconds_and_changes_across_minutes() {
         let model = fixture();
         let session = session_at(&model, NOW);
-        let seen = alert_keys(&session);
-        let first = build(&model, &session, &seen, NOW);
-        let soon = build(&model, &session, &seen, NOW + 30);
+        let first = build(&model, &session, NOW);
+        let soon = build(&model, &session, NOW + 30);
         assert_eq!(first, soon, "thirty seconds change nothing shown");
-        let later = build(&model, &session, &seen, NOW + 300);
+        let later = build(&model, &session, NOW + 300);
         assert_ne!(first, later, "five minutes move the save age");
         assert!(later.header.contains("(15m ago)"), "{}", later.header);
     }
@@ -383,10 +529,9 @@ mod tests {
     fn test_view_changes_when_a_save_is_written() {
         let model = fixture();
         let mut session = session_at(&model, NOW);
-        let seen = alert_keys(&session);
-        let before = build(&model, &session, &seen, NOW);
+        let before = build(&model, &session, NOW);
         session.save_written = Some(NOW);
-        let after = build(&model, &session, &seen, NOW);
+        let after = build(&model, &session, NOW);
         assert_ne!(before, after);
         assert!(after.header.contains("(just now)"), "{}", after.header);
     }
@@ -395,14 +540,13 @@ mod tests {
     fn test_header_without_watcher_or_save_time() {
         let model = fixture();
         let session = SessionState::from_model(&model);
-        let view = build(&model, &session, &HashSet::new(), NOW);
+        let view = build(&model, &session, NOW);
         assert!(
             view.header
                 .ends_with("save time unknown \u{00B7} not watching"),
             "{}",
             view.header
         );
-        assert!(view.alerts.is_empty(), "no refresh, no alerts");
     }
 
     #[test]

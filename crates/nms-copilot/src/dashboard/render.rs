@@ -1,14 +1,14 @@
 //! Ratatui layout for the dashboard. Nothing here reads the model; it lays out the strings in a [`View`] in the colours of a [`Palette`].
 //!
-//! Each panel is a bordered section holding one of the REPL's tables: the section's frame and name, then a header bar of column names over rows on the deep-space navy.
+//! Each section is a bordered box with its name in the frame. The player's own details are a plain list of labelled facts, two to a line; the rest hold one of the REPL's tables, a header bar of column names over rows on the deep-space navy. A cell that wants the player is drawn in the attention colour.
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use super::palette::Palette;
-use super::view::{BaseRow, FleetPanel, FleetRow, View};
+use super::view::{BaseRow, Fact, FleetPanel, FleetRow, PlayerPanel, View};
 
 /// Below this many columns the bases and fleet panels stack instead of sitting side by side. Both carry the same columns as the REPL's tables, which need the width.
 pub const STACK_BELOW: u16 = 150;
@@ -19,15 +19,15 @@ pub fn draw(frame: &mut Frame, view: &View, palette: &Palette) {
     // One block of colour under everything, so the sections sit on the same navy as the tables.
     frame.render_widget(Block::default().style(palette.background), area);
 
+    let need = needs(view);
     let rows = area.height.saturating_sub(1);
     if area.width >= STACK_BELOW {
-        let middle = needs(view).bases.max(needs(view).fleet);
         let heights = share(
             rows,
-            &[needs(view).alerts, middle, needs(view).log],
-            &[MIN_ALERTS, MIN_TABLE, MIN_LOG],
+            &[need.player, need.bases.max(need.fleet), need.log],
+            &[MIN_PLAYER, MIN_TABLE, MIN_LOG],
         );
-        let [header, alerts, middle, log] = Layout::vertical([
+        let [header, player, middle, log] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(heights[0]),
             Constraint::Length(heights[1]),
@@ -35,7 +35,7 @@ pub fn draw(frame: &mut Frame, view: &View, palette: &Palette) {
         ])
         .areas(area);
         draw_header(frame, header, view, palette);
-        draw_alerts(frame, alerts, view, palette);
+        draw_player(frame, player, &view.player, palette);
         let [bases, fleet] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(middle);
@@ -43,13 +43,12 @@ pub fn draw(frame: &mut Frame, view: &View, palette: &Palette) {
         draw_fleet(frame, fleet, view.fleet.as_ref(), palette);
         draw_log(frame, log, &view.log, palette);
     } else {
-        let need = needs(view);
         let heights = share(
             rows,
-            &[need.alerts, need.bases, need.fleet, need.log],
-            &[MIN_ALERTS, MIN_TABLE, MIN_TABLE, MIN_LOG],
+            &[need.player, need.bases, need.fleet, need.log],
+            &[MIN_PLAYER, MIN_TABLE, MIN_TABLE, MIN_LOG],
         );
-        let [header, alerts, bases, fleet, log] = Layout::vertical([
+        let [header, player, bases, fleet, log] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(heights[0]),
             Constraint::Length(heights[1]),
@@ -58,15 +57,15 @@ pub fn draw(frame: &mut Frame, view: &View, palette: &Palette) {
         ])
         .areas(area);
         draw_header(frame, header, view, palette);
-        draw_alerts(frame, alerts, view, palette);
+        draw_player(frame, player, &view.player, palette);
         draw_bases(frame, bases, &view.bases, palette);
         draw_fleet(frame, fleet, view.fleet.as_ref(), palette);
         draw_log(frame, log, &view.log, palette);
     }
 }
 
-/// Two borders and one line of content: the least a section can show and still say anything.
-const MIN_ALERTS: u16 = 3;
+/// Two borders and one line of facts.
+const MIN_PLAYER: u16 = 3;
 /// Two borders, column headings, and one row.
 const MIN_TABLE: u16 = 4;
 /// Two borders and one line.
@@ -74,7 +73,7 @@ const MIN_LOG: u16 = 3;
 
 /// The rows each section would take if the screen were tall enough.
 struct Needs {
-    alerts: u16,
+    player: u16,
     bases: u16,
     fleet: u16,
     log: u16,
@@ -82,8 +81,8 @@ struct Needs {
 
 fn needs(view: &View) -> Needs {
     Needs {
-        // Two borders and the alerts, but never more than six of them; the rest are a keypress away at the prompt.
-        alerts: (view.alerts.len().clamp(1, 6) as u16) + 2,
+        // Two borders and the facts, two to a line.
+        player: view.player.rows().max(1) as u16 + 2,
         // Two borders, column headings, one row per base.
         bases: view.bases.len().max(1) as u16 + 3,
         // Two borders, column headings, one row per expedition, a blank, the Navigator and home lines.
@@ -91,8 +90,8 @@ fn needs(view: &View) -> Needs {
             Some(fleet) => fleet.rows.len().max(1) as u16 + 6,
             None => MIN_TABLE,
         },
-        // Two borders and the kept log lines.
-        log: view.log.len().max(1) as u16 + 2,
+        // Two borders and the kept log lines, but asking for no more than eight: the log is history and the tables above it are the live state, so on a short screen the log is the one that yields. It still takes the slack when everything fits.
+        log: (view.log.len().clamp(1, 8) as u16) + 2,
     }
 }
 
@@ -179,26 +178,39 @@ fn draw_header(frame: &mut Frame, area: Rect, view: &View, palette: &Palette) {
     );
 }
 
-fn draw_alerts(frame: &mut Frame, area: Rect, view: &View, palette: &Palette) {
-    let body = panel(frame, area, "Alerts", palette);
-    let lines: Vec<Line> = if view.alerts.is_empty() {
-        vec![Line::from(Span::styled("Nothing waiting", palette.muted))]
-    } else {
-        view.alerts
-            .iter()
-            .map(|alert| {
-                if alert.fresh {
-                    Line::from(vec![
-                        Span::styled("\u{25CF} ", palette.attention),
-                        Span::styled(alert.text.clone(), palette.attention),
-                    ])
-                } else {
-                    Line::from(Span::styled(format!("  {}", alert.text), palette.text))
-                }
-            })
-            .collect()
+fn draw_player(frame: &mut Frame, area: Rect, player: &PlayerPanel, palette: &Palette) {
+    let body = panel(frame, area, "Player", palette);
+    if player.facts.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("No player state", palette.muted)),
+            body,
+        );
+        return;
+    }
+    let label = |fact: Option<&Fact>| match fact {
+        Some((name, _)) => Cell::from(name.clone()).style(palette.muted),
+        None => Cell::from(String::new()),
     };
-    frame.render_widget(Paragraph::new(lines), body);
+    let value = |fact: Option<&Fact>| match fact {
+        Some((_, text)) => Cell::from(text.clone()),
+        None => Cell::from(String::new()),
+    };
+    let rows = (0..player.rows()).map(|row| {
+        let (left, right) = player.line(row);
+        Row::new(vec![label(left), value(left), label(right), value(right)])
+    });
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(12),
+            Constraint::Fill(1),
+            Constraint::Length(12),
+            Constraint::Fill(1),
+        ],
+    )
+    .column_spacing(1)
+    .style(palette.text);
+    frame.render_widget(table, body);
 }
 
 fn draw_bases(frame: &mut Frame, area: Rect, bases: &[BaseRow], palette: &Palette) {
@@ -210,14 +222,15 @@ fn draw_bases(frame: &mut Frame, area: Rect, bases: &[BaseRow], palette: &Palett
         );
         return;
     }
+    // What the alerts section used to say is said here instead: a cell the player needs to act on is drawn in the attention colour.
     let rows = bases.iter().map(|b| {
         Row::new(vec![
-            b.name.clone(),
-            b.kind.clone(),
-            b.crops.clone(),
-            b.next.clone(),
-            b.extraction.clone(),
-            b.power.clone(),
+            Cell::from(b.name.clone()),
+            Cell::from(b.kind.clone()),
+            mark(&b.crops, b.crops_want_you, palette),
+            mark(&b.next, b.crops_want_you, palette),
+            mark(&b.extraction, b.extraction_wants_you, palette),
+            Cell::from(b.power.clone()),
         ])
     });
     let table = Table::new(
@@ -238,6 +251,16 @@ fn draw_bases(frame: &mut Frame, area: Rect, bases: &[BaseRow], palette: &Palett
     .column_spacing(1)
     .style(palette.text);
     frame.render_widget(table, body);
+}
+
+/// A cell in the attention colour when it wants the player, in ordinary text otherwise.
+fn mark<'a>(text: &str, wants_you: bool, palette: &Palette) -> Cell<'a> {
+    let cell = Cell::from(text.to_string());
+    if wants_you {
+        cell.style(palette.attention)
+    } else {
+        cell
+    }
 }
 
 fn draw_fleet(frame: &mut Frame, area: Rect, fleet: Option<&FleetPanel>, palette: &Palette) {
@@ -277,8 +300,13 @@ fn draw_fleet(frame: &mut Frame, area: Rect, fleet: Option<&FleetPanel>, palette
             table_area,
         );
     }
+    let offers_style = if fleet.offers_want_you {
+        palette.attention
+    } else {
+        palette.muted
+    };
     let lines = [
-        Line::from(Span::styled(fleet.offers.clone(), palette.muted)),
+        Line::from(Span::styled(fleet.offers.clone(), offers_style)),
         Line::from(Span::styled(fleet.rooms.clone(), palette.muted)),
     ];
     frame.render_widget(
@@ -290,13 +318,13 @@ fn draw_fleet(frame: &mut Frame, area: Rect, fleet: Option<&FleetPanel>, palette
 fn fleet_table<'a>(rows: &'a [FleetRow], palette: &Palette, height: u16) -> Table<'a> {
     let rows = rows.iter().map(|r| {
         Row::new(vec![
-            r.number.clone(),
-            r.kind.clone(),
-            r.length.clone(),
-            r.frigates.clone(),
-            r.events.clone(),
-            r.elapsed.clone(),
-            r.status.clone(),
+            Cell::from(r.number.clone()),
+            Cell::from(r.kind.clone()),
+            Cell::from(r.length.clone()),
+            Cell::from(r.frigates.clone()),
+            Cell::from(r.events.clone()),
+            Cell::from(r.elapsed.clone()),
+            mark(&r.status, r.status_wants_you, palette),
         ])
     });
     let table = Table::new(
@@ -347,7 +375,6 @@ fn draw_log(frame: &mut Frame, area: Rect, log: &[String], palette: &Palette) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::view::AlertLine;
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -357,17 +384,30 @@ mod tests {
             title: "NMS Copilot".into(),
             header: "Euclid \u{00B7} at Base Ferox \u{00B7} save 21:14 (10m ago) \u{00B7} watching slot 1".into(),
             keys: super::super::view::KEYS.into(),
-            alerts: vec![
-                AlertLine { fresh: true, text: "Fleet: expedition 1 (Trade) is waiting for your decision since 20:58".into() },
-                AlertLine { fresh: false, text: "Base Ferox: 14 Gamma Weed ready".into() },
-            ],
+            player: PlayerPanel {
+                facts: [
+                    ("System", "Lauderen \u{00B7} 6 planets"),
+                    ("Address", "2043FC956DEC"),
+                    ("From centre", "127,412 ly"),
+                    ("Warped from", "Ekitok"),
+                    ("Known", "293 systems \u{00B7} 644 planets"),
+                    ("Units", "1,234,567"),
+                    ("Nanites", "272,127"),
+                    ("Quicksilver", "2,230"),
+                    ("Freighter", "in this system"),
+                    ("Bases", "8"),
+                ]
+                .map(|(label, value)| (label.to_string(), value.to_string()))
+                .to_vec(),
+            },
             bases: vec![
-                BaseRow { name: "Base Ferox".into(), kind: "home".into(), crops: "14 / 40".into(), next: "now".into(), extraction: "3,148 / 4,000  1 of 2 FULL".into(), power: "1 battery full \u{00B7} 6 electromagnetic".into() },
-                BaseRow { name: "Freighter".into(), kind: "freighter".into(), crops: "-".into(), next: "-".into(), extraction: "-".into(), power: "-".into() },
+                BaseRow { name: "Base Ferox".into(), kind: "home".into(), crops: "14 / 40".into(), crops_want_you: true, next: "now".into(), extraction: "3,148 / 4,000  1 of 2 FULL".into(), extraction_wants_you: true, power: "1 battery full \u{00B7} 6 electromagnetic".into() },
+                BaseRow { name: "Freighter".into(), kind: "freighter".into(), crops: "-".into(), crops_want_you: false, next: "-".into(), extraction: "-".into(), extraction_wants_you: false, power: "-".into() },
             ],
             fleet: Some(FleetPanel {
-                rows: vec![FleetRow { number: "1".into(), kind: "Trade".into(), length: "Very long".into(), frigates: "5".into(), events: "16/18".into(), elapsed: "17h 30m".into(), status: "waiting since 20:58".into() }],
+                rows: vec![FleetRow { number: "1".into(), kind: "Trade".into(), length: "Very long".into(), frigates: "5".into(), events: "16/18".into(), elapsed: "17h 30m".into(), status: "waiting since 20:58".into(), status_wants_you: true }],
                 offers: "Offers: 3 of 5 left \u{00B7} new in 2h 45m (00:00 UTC)".into(),
+                offers_want_you: false,
                 rooms: "Rooms: 6 of 8 free \u{00B7} 17 of 25 frigates at home".into(),
             }),
             log: vec!["21:14  Save written: slot 1 Auto".into(), "20:58  Fleet: expedition 1 is waiting".into()],
@@ -398,22 +438,18 @@ mod tests {
             .join("\n")
     }
 
-    /// A screen the size of a real save: eight bases, six alerts, a fleet, a full log.
+    /// A screen the size of a real save: eight bases, a fleet, a full log.
     fn busy() -> View {
         let mut v = sample();
-        v.alerts = (0..6)
-            .map(|n| AlertLine {
-                fresh: n < 2,
-                text: format!("Base {n}: depots full on extraction network B (4,000 units)"),
-            })
-            .collect();
         v.bases = (0..8)
             .map(|n| BaseRow {
                 name: format!("Base number {n}"),
                 kind: "home".into(),
                 crops: "16 / 142".into(),
+                crops_want_you: false,
                 next: "2h 10m".into(),
                 extraction: "8,898 / 9,750  2 of 3 FULL".into(),
+                extraction_wants_you: true,
                 power: "1 battery full \u{00B7} 6 electromagnetic".into(),
             })
             .collect();
@@ -425,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_every_section_keeps_its_data_on_a_small_screen() {
-        // The screen a real save fills: more alerts, bases, and log lines than a 24-row terminal can hold at once.
+        // The screen a real save fills: more bases and log lines than a 24-row terminal can hold at once.
         for (w, h) in [(100u16, 22u16), (120, 28), (80, 20)] {
             let text = screen(&busy(), w, h);
             let missing = |needle: &str| !text.contains(needle);
@@ -436,7 +472,6 @@ mod tests {
                 "the fleet shows its heading but no expedition at {w}x{h}:\n{text}"
             );
             assert!(!missing("Save written"), "no log lines at {w}x{h}:\n{text}");
-            assert!(!missing("depots full"), "no alerts at {w}x{h}:\n{text}");
         }
     }
 
@@ -447,7 +482,7 @@ mod tests {
         assert!(roomy.contains("1  Trade"), "{roomy}");
         assert!(roomy.contains("Offers: 3 of 5 left"), "{roomy}");
         // With none, the expedition keeps its row and the Navigator line is the one that goes.
-        let tight = screen(&busy(), 80, 20);
+        let tight = screen(&busy(), 80, 16);
         assert!(tight.contains("1  Trade"), "{tight}");
         assert!(!tight.contains("Offers: 3 of 5 left"), "{tight}");
     }
@@ -481,12 +516,37 @@ mod tests {
         let text = screen(&sample(), 120, 32);
         assert!(text.contains("NMS Copilot"), "{text}");
         assert!(text.contains("q quit  : prompt"), "{text}");
-        for title in [" ALERTS ", " BASES ", " FLEET ", " LOG "] {
+        for title in [" PLAYER ", " BASES ", " FLEET ", " LOG "] {
             assert!(text.contains(title), "missing {title} in\n{text}");
         }
         assert!(text.contains('\u{250C}'), "each section is framed:\n{text}");
-        assert!(text.contains("\u{25CF} Fleet: expedition 1"), "{text}");
-        assert!(text.contains("  Base Ferox: 14 Gamma Weed ready"), "{text}");
+    }
+
+    #[test]
+    fn test_player_section_lays_its_facts_out_two_to_a_line() {
+        let text = screen(&sample(), 140, 30);
+        for fact in [
+            "System",
+            "Lauderen",
+            "Address",
+            "2043FC956DEC",
+            "From centre",
+            "127,412 ly",
+            "Units",
+            "1,234,567",
+            "Nanites",
+            "Quicksilver",
+            "Freighter",
+            "in this system",
+        ] {
+            assert!(text.contains(fact), "missing {fact} in\n{text}");
+        }
+        // Ten facts make five lines, so the first of each half share the top one.
+        let top = text
+            .lines()
+            .find(|line| line.contains("System"))
+            .expect("the first line of facts");
+        assert!(top.contains("Units"), "{top}");
     }
 
     #[test]
@@ -541,14 +601,14 @@ mod tests {
     #[test]
     fn test_empty_panels_have_placeholders() {
         let view = View {
-            alerts: Vec::new(),
+            player: PlayerPanel::default(),
             bases: Vec::new(),
             fleet: None,
             log: Vec::new(),
             ..sample()
         };
         let text = screen(&view, 120, 24);
-        assert!(text.contains("Nothing waiting"), "{text}");
+        assert!(text.contains("No player state"), "{text}");
         assert!(text.contains("No bases"), "{text}");
         assert!(text.contains("No freighter"), "{text}");
         assert!(text.contains("Nothing yet"), "{text}");
@@ -558,6 +618,42 @@ mod tests {
     fn test_tiny_screen_does_not_panic() {
         let text = screen(&sample(), 20, 5);
         assert!(!text.is_empty());
+    }
+
+    /// The style of the first character of `needle`, wherever it appears on the screen.
+    fn style_at(buffer: &ratatui::buffer::Buffer, needle: &str) -> ratatui::style::Style {
+        let area = buffer.area();
+        for y in 0..area.height {
+            let row: String = (0..area.width)
+                .map(|x| buffer[(x, y)].symbol().to_string())
+                .collect();
+            if let Some(byte) = row.find(needle) {
+                let column = row[..byte].chars().count() as u16;
+                return buffer[(column, y)].style();
+            }
+        }
+        panic!("{needle:?} is not on the screen");
+    }
+
+    #[test]
+    fn test_what_wants_the_player_is_drawn_in_the_attention_colour() {
+        let palette = Palette::dark();
+        let buffer = buffer_of(&sample(), &palette, 140, 24);
+        // Base Ferox has plants ready and a full network, so those cells and its next-harvest time carry the colour.
+        assert_eq!(style_at(&buffer, "14 / 40").fg, palette.attention.fg);
+        assert_eq!(style_at(&buffer, "1 of 2 FULL").fg, palette.attention.fg);
+        // The trailing space keeps this off the "Known" label in the section above.
+        assert_eq!(style_at(&buffer, "now ").fg, palette.attention.fg);
+        // Everything else stays ordinary. The base's name is no good as a needle here: it is in the line above too.
+        assert_eq!(style_at(&buffer, "freighter").fg, palette.text.fg);
+        assert_eq!(style_at(&buffer, "1 battery full").fg, palette.text.fg);
+        // The expedition is holding for a decision.
+        assert_eq!(
+            style_at(&buffer, "waiting since 20:58").fg,
+            palette.attention.fg
+        );
+        // The Navigator has nothing new, so its line stays quiet.
+        assert_eq!(style_at(&buffer, "Offers: 3 of 5").fg, palette.muted.fg);
     }
 
     #[test]

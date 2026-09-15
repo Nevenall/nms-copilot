@@ -482,8 +482,8 @@ pub fn format_ago(secs: i64) -> String {
 }
 
 /// Insert thousands separators: `4750` becomes `4,750`.
-pub fn thousands(n: u32) -> String {
-    let digits = n.to_string();
+pub fn thousands(n: impl Into<u64>) -> String {
+    let digits = n.into().to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, ch) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {
@@ -1681,10 +1681,11 @@ mod tests {
             assert_eq!(format_duration(7_260), "2h 01m");
             assert_eq!(format_duration(97_200), "1d 03h");
             assert_eq!(format_duration(-5), "< 1m");
-            assert_eq!(thousands(0), "0");
-            assert_eq!(thousands(999), "999");
-            assert_eq!(thousands(4_750), "4,750");
-            assert_eq!(thousands(1_440_000), "1,440,000");
+            assert_eq!(thousands(0u32), "0");
+            assert_eq!(thousands(999u32), "999");
+            assert_eq!(thousands(4_750u32), "4,750");
+            assert_eq!(thousands(1_440_000u32), "1,440,000");
+            assert_eq!(thousands(9_007_199_254_740_991u64), "9,007,199,254,740,991");
         }
 
         #[test]

@@ -1,4 +1,4 @@
-//! The dashboard: a full-screen view of the alerts, bases, fleet, and log that redraws only when something shown has changed.
+//! The dashboard: a full-screen view of the bases, the fleet, and a log, that redraws only when something shown has changed. Anything wanting the player is coloured in the row it belongs to rather than listed apart.
 //!
 //! The loop wakes for three things: what the watcher reports, a timer that re-checks the alerts against the clock, and keys. Each wake rebuilds the [`view::View`] and draws it only if it differs from the last one drawn, so a save write, an alert coming due, a keypress, a resize, or a coarse clock change redraws the screen and nothing else does. The model's read lock is held only while a view is built and the write lock only while a delta is applied, so the MCP server keeps answering.
 //!
@@ -9,7 +9,6 @@ pub mod palette;
 pub mod render;
 pub mod view;
 
-use std::collections::HashSet;
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
@@ -76,10 +75,8 @@ pub fn run(
     watch: &WatchContext<'_>,
     options: &Options,
 ) -> io::Result<Next> {
-    // Alerts already on screen when the dashboard opens are not news; only later ones get a marker. The set outlives a resize.
-    let mut seen: HashSet<String> = view::alert_keys(session);
     loop {
-        match run_screen(model, session, watch, options, &mut seen)? {
+        match run_screen(model, session, watch, options)? {
             Screen::Leave(next) => return Ok(next),
             Screen::Resized => {}
         }
@@ -92,7 +89,6 @@ fn run_screen(
     session: &mut SessionState,
     watch: &WatchContext<'_>,
     options: &Options,
-    seen: &mut HashSet<String>,
 ) -> io::Result<Screen> {
     let mut stdout = io::stdout();
     scroll_into_history(&mut stdout)?;
@@ -108,7 +104,7 @@ fn run_screen(
         },
     )?;
 
-    let result = screen_loop(&mut terminal, model, session, watch, options, seen);
+    let result = screen_loop(&mut terminal, model, session, watch, options);
 
     crossterm::terminal::disable_raw_mode()?;
     // Leave the cursor on the first clear row under the dashboard, which is where the prompt draws itself.
@@ -123,7 +119,6 @@ fn screen_loop(
     session: &mut SessionState,
     watch: &WatchContext<'_>,
     options: &Options,
-    seen: &mut HashSet<String>,
 ) -> io::Result<Screen> {
     let palette = Palette::for_color(options.color);
     let mut last_drawn: Option<View> = None;
@@ -149,7 +144,7 @@ fn screen_loop(
             }
             let view = {
                 let guard = model.blocking_read();
-                view::build(&guard, session, seen, now)
+                view::build(&guard, session, now)
             };
             if last_drawn.as_ref() != Some(&view) {
                 terminal.draw(|frame| render::draw(frame, &view, &palette))?;
@@ -162,10 +157,7 @@ fn screen_loop(
             Input::None => {}
             Input::Quit => return Ok(Screen::Leave(Next::Quit)),
             Input::Prompt => return Ok(Screen::Leave(Next::Prompt)),
-            Input::Key => {
-                *seen = view::alert_keys(session);
-                wake = true;
-            }
+            Input::Key => wake = true,
             Input::Resize => return Ok(Screen::Resized),
         }
     }

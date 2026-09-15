@@ -280,18 +280,21 @@ REPL-only commands:
 
 ### Dashboard
 
-`nms-copilot` opens into a dashboard rather than a prompt: a view of the current alerts, every base, the fleet, and a log of what happened, meant for a terminal on a second monitor so you never leave the game. It uses the same deep-space palette as the tables, and follows `display.color`. It redraws only when something shown changes: a save write, an alert coming due, a key or a resize, or a countdown ticking over. Times are shown to the minute, and to five-minute steps above ten minutes, so the screen changes a handful of times an hour. A new alert rings the terminal bell, which Windows Terminal can turn into a sound or a taskbar flash according to its `bellStyle`.
+`nms-copilot` opens into a dashboard rather than a prompt: your own details, every base, the fleet, and a log of what happened, meant for a terminal on a second monitor so you never leave the game. Anything wanting your attention is coloured in place, so ready crops, a full extraction network, and an expedition holding for a decision stand out in the row they belong to. It uses the same deep-space palette as the tables, and follows `display.color`. It redraws only when something shown changes: a save write, an alert coming due, a key or a resize, or a countdown ticking over. Times are shown to the minute, and to five-minute steps above ten minutes, so the screen changes a handful of times an hour. A new alert rings the terminal bell, which Windows Terminal can turn into a sound or a taskbar flash according to its `bellStyle`.
 
 ```
- NMS Copilot   Euclid · at Base Ferox · save 21:14 (10m ago) · watching slot 1      q quit  : prompt
-┌ ALERTS ──────────────────────────────────────────────────────────────────────────────────────────┐
-│● Fleet: expedition 1 (Trade) is waiting for your decision since 20:58                            │
-│  Base Ferox: 14 Gamma Weed ready                                                                 │
+ NMS Copilot   Euclid · in Lauderen · save 21:14 (10m ago) · watching slot 1        q quit  : prompt
+┌ PLAYER ──────────────────────────────────────────────────────────────────────────────────────────┐
+│System       Lauderen · 6 planets          Units        551,213,032                               │
+│Address      2043FC956DEC                  Nanites      4,253                                     │
+│From centre  127,412 ly                    Quicksilver  240                                       │
+│Warped from  Ekitok                        Freighter    in this system                            │
+│Known        293 systems · 644 planets     Bases        8                                         │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ BASES ───────────────────────────────────────────────────────────────────────────────────────────┐
 │Base                Type      Crops     Next    Extraction                 Power                  │
-│Base Ferox          home      14 / 40   now     3,148 / 4,000  1 of 2 FULL 1 battery full · 6 elec│
-│Ionised Rain        planet    0 / 12    2h 10m  1,750 / 1,750  FULL        2 batteries full · 4 so│
+│Farm                home      16 / 142  now     8,898 / 9,750  2 of 3 FULL 1 battery full · 6 e   │
+│Radon               home      -         -       4,750 / 4,750  FULL        1 battery full · 2 e   │
 │Home Freighter      freighter -         -       -                          -                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ FLEET ───────────────────────────────────────────────────────────────────────────────────────────┐
@@ -309,7 +312,7 @@ REPL-only commands:
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Each section is a framed box holding one of the REPL's tables: a bar of column names over rows on the deep-space navy. Sections share the height between them, so a screen too short for everything trims each one rather than starving the ones at the bottom, and the log keeps whatever is left over. The bases and the fleet carry the same columns and the same cell text as the `base` and `fleet` overviews, so what you read on the dashboard is what those commands print, with a `Next` column added for the soonest harvest. Below about 150 columns the two panels stack so each keeps its full width; above that they sit side by side. Keys: `:` or Enter drops to the prompt, `q` quits, and any other key clears the new-alert markers.
+The player section carries where you are, how far out from the centre, where you warped from, where the freighter is, what you are carrying, and how much of the galaxy the atlas holds. The rest are framed boxes holding the REPL's own tables: a bar of column names over rows on the deep-space navy. Sections share the height between them, so a screen too short for everything trims each one rather than starving the ones at the bottom. The log yields first, since it is history and the tables above it are the live state, and it takes the slack when everything fits. The bases and the fleet carry the same columns and the same cell text as the `base` and `fleet` overviews, so what you read on the dashboard is what those commands print, with a `Next` column added for the soonest harvest. Below about 150 columns the two panels stack so each keeps its full width; above that they sit side by side. Keys: `:` or Enter drops to the prompt and `q` quits.
 
 The dashboard is drawn in the terminal's own buffer, not a separate screen, and leaves the bottom rows clear. Pressing `:` puts the prompt on the first of those rows with the dashboard still above it, so a command's output scrolls the dashboard up the way any other output would, and a short answer sits under a dashboard you can still read. A reminder of the way back prints with the prompt:
 
