@@ -25,7 +25,6 @@ nms-query = { workspace = true }
 nms-watch = { workspace = true }
 clap = { workspace = true }
 oxur-cli = { workspace = true }
-tabled = { workspace = true }
 dialoguer = { workspace = true }
 owo-colors = { workspace = true }
 dirs = { workspace = true }

@@ -17,9 +17,9 @@ nms-core = { workspace = true }
 nms-graph = { workspace = true }
 nms-save = { workspace = true }
 oxur-cli = { workspace = true }
-tabled = "0.17"
+tabled = { workspace = true }
 chrono = { workspace = true }
-terminal_size = "0.3"
+terminal_size = "0.4"
 unicode-width = "0.2"
 toml = { workspace = true }
 

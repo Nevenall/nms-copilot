@@ -65,6 +65,18 @@ cargo test -p nms-save -- test_name  # Run a single test
 
 Always run `make format` after changes, then `make lint` before testing.
 
+### Dependency Updates
+
+Run `cargo update` for in-range bumps and check `cargo info <crate>` for newer majors; the resolver honours `rust-version` in the workspace `Cargo.toml`. Known constraints as of 2026-09-15:
+
+- **Re-pin rmcp after every `cargo update`:** `cargo update rmcp --precise 1.2.0`. `fabryk-mcp-core 0.4.2` declares `rmcp = "1"` but fails to compile against rmcp 1.3 and later (`StreamableHttpService` gained a second type parameter). Only the lockfile holds the pin; drop it once fabryk-mcp releases a fix.
+- **tabled must match oxur-cli's version** (0.17 at oxur-cli 0.2.1): `nms-query`'s table `Builder` is passed into oxur-cli's `TableStyleConfig`. Only `nms-query` depends on tabled. The `proc-macro-error2` future-incompat warning comes from that tabled version and goes away when oxur-cli moves.
+- **reedline 0.50 and later require Rust 1.95**, above the workspace `rust-version`; raise the MSRV before bumping past 0.49. 0.49 made `Signal` non-exhaustive, which `main.rs` handles with a wildcard arm.
+- **rstar 0.13** takes the query point by value in `nearest_neighbor` and `nearest_neighbor_iter`.
+- **notify 9** was still a release candidate, and `notify-debouncer-mini 0.7` needs notify 8.
+
+After updating: `make format`, `make lint`, `make test`, then run `nms fleet` and `nms backup list` against a real save.
+
 ## Key Technical Details
 
 ### Save File Parsing Pipeline

@@ -96,7 +96,7 @@ mod tests {
             SystemPoint::new(SystemId(3), 100.0, 0.0, 0.0),
         ];
         let tree = RTree::bulk_load(points);
-        let nearest = tree.nearest_neighbor(&[1.0, 0.0, 0.0]).unwrap();
+        let nearest = tree.nearest_neighbor([1.0, 0.0, 0.0]).unwrap();
         assert_eq!(nearest.id, SystemId(1));
     }
 

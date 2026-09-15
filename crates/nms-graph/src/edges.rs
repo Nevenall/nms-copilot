@@ -72,7 +72,7 @@ impl GalaxyModel {
 
             // Collect R-tree neighbor IDs first, then look up distances.
             let neighbor_ids: Vec<SystemId> = spatial
-                .nearest_neighbor_iter(&query_point)
+                .nearest_neighbor_iter(query_point)
                 .filter(|sp| sp.id != sys_id)
                 .take(k)
                 .map(|sp| sp.id)
@@ -137,7 +137,7 @@ impl GalaxyModel {
 
             // Collect R-tree neighbor IDs first, then look up distances.
             let neighbor_ids: Vec<SystemId> = spatial
-                .nearest_neighbor_iter(&query_point)
+                .nearest_neighbor_iter(query_point)
                 .take_while(|sp| sp.distance_2(&query_point) <= voxel_radius_sq)
                 .filter(|sp| sp.id != sys_id)
                 .map(|sp| sp.id)
@@ -200,7 +200,7 @@ impl GalaxyModel {
 
         // Collect R-tree neighbor IDs first, then look up distances.
         let neighbor_ids: Vec<SystemId> = spatial
-            .nearest_neighbor_iter(&query_point)
+            .nearest_neighbor_iter(query_point)
             .filter(|sp| sp.id != sys_id)
             .take(k)
             .map(|sp| sp.id)

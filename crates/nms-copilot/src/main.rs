@@ -293,6 +293,8 @@ fn main() {
             Ok(Signal::CtrlD | Signal::CtrlC) => {
                 break;
             }
+            // `Signal` is non-exhaustive as of reedline 0.49; other signals need no action.
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("Input error: {e}");
                 break;

@@ -62,7 +62,7 @@ impl GalaxyModel {
         ];
 
         let mut results: Vec<(SystemId, f64)> = spatial
-            .nearest_neighbor_iter(&query_point)
+            .nearest_neighbor_iter(query_point)
             .take(n * 3)
             .filter_map(|sp| {
                 let system = self.systems.get(&sp.id)?;
@@ -102,7 +102,7 @@ impl GalaxyModel {
         let voxel_radius_sq = voxel_radius * voxel_radius;
 
         let mut results: Vec<(SystemId, f64)> = spatial
-            .nearest_neighbor_iter(&query_point)
+            .nearest_neighbor_iter(query_point)
             .take_while(|sp| sp.distance_2(&query_point) <= voxel_radius_sq)
             .filter_map(|sp| {
                 let system = self.systems.get(&sp.id)?;
@@ -145,7 +145,7 @@ impl GalaxyModel {
         let mut results = Vec::with_capacity(n);
 
         // Over-collect candidates to allow re-sorting by SSI-aware distance.
-        for sp in spatial.nearest_neighbor_iter(&query_point) {
+        for sp in spatial.nearest_neighbor_iter(query_point) {
             if results.len() >= n * 3 {
                 break;
             }
