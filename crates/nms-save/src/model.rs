@@ -565,6 +565,10 @@ pub struct BaseObject {
     #[serde(default)]
     pub position: [f32; 3],
 
+    /// A unit orientation vector, except on a line part where it is the run itself.
+    #[serde(default)]
+    pub at: [f32; 3],
+
     #[serde(default)]
     pub timestamp: u64,
 
@@ -579,6 +583,8 @@ impl BaseObject {
             object_id: &self.object_id,
             timestamp: i64::try_from(self.timestamp).unwrap_or(i64::MAX),
             user_data: self.user_data,
+            position: self.position,
+            at: self.at,
         }
     }
 }

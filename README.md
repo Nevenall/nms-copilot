@@ -150,6 +150,8 @@ nms stats --discoveries               # discovery counts by type
 nms saves                             # list all save slots
 ```
 
+`base "Name"` lists a base's supply networks as A, B, C. Nothing in the save says which depots and extractors share a network, so the networks are traced through the pipes: a supply pipe records its own run, pipes that meet end to end are one network, a pipe joins the machine it reaches, and depots built touching each other join without a pipe. See [docs/reference/nms-save-notes.md](docs/reference/nms-save-notes.md#wires-pipes-and-cables-what-is-connected-to-what).
+
 ### Raw Save Inspection
 
 `nms raw` prints any part of the decoded save as JSON, for finding out what the file holds before the model does. Output is pruned by depth and array length so it stays readable; pruned parts show as `{… N keys}`, `[… N items]`, or `… N more`.
@@ -237,7 +239,7 @@ Restore is manual, and the tool never writes into the game's folder. With the ga
 
 ### Interactive REPL
 
-The REPL (`nms-copilot`) supports all the commands above plus session management and an interactive galaxy map. It also watches your bases and your fleet: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full · 🚀 1 waiting` while crops are ready to harvest, an extraction network is full, a frigate is waiting for your decision, or an expedition has returned, and a notice prints once when any of those happens. New Navigator offers after the 00:00 UTC reset are announced the same way.
+The REPL (`nms-copilot`) opens into a dashboard (see below) and, at its prompt, supports all the commands above plus session management and an interactive galaxy map. It also watches your bases and your fleet: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full · 🚀 1 waiting` while crops are ready to harvest, an extraction network is full, a frigate is waiting for your decision, or an expedition has returned, and a notice prints once when any of those happens. New Navigator offers after the 00:00 UTC reset are announced the same way.
 
 ```bash
 nms-copilot
@@ -274,6 +276,59 @@ REPL-only commands:
 | `backup [--label L]` | Snapshot the save now |
 | `backup on\|off\|list` | Automatic snapshots for this session, or what is kept |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
+| `dash` | Return to the dashboard (an empty line does the same) |
+
+### Dashboard
+
+`nms-copilot` opens into a dashboard rather than a prompt: a view of the current alerts, every base, the fleet, and a log of what happened, meant for a terminal on a second monitor so you never leave the game. It uses the same deep-space palette as the tables, and follows `display.color`. It redraws only when something shown changes: a save write, an alert coming due, a key or a resize, or a countdown ticking over. Times are shown to the minute, and to five-minute steps above ten minutes, so the screen changes a handful of times an hour. A new alert rings the terminal bell, which Windows Terminal can turn into a sound or a taskbar flash according to its `bellStyle`.
+
+```
+ NMS Copilot   Euclid · at Base Ferox · save 21:14 (10m ago) · watching slot 1      q quit  : prompt
+┌ ALERTS ──────────────────────────────────────────────────────────────────────────────────────────┐
+│● Fleet: expedition 1 (Trade) is waiting for your decision since 20:58                            │
+│  Base Ferox: 14 Gamma Weed ready                                                                 │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌ BASES ───────────────────────────────────────────────────────────────────────────────────────────┐
+│Base                Type      Crops     Next    Extraction                 Power                  │
+│Base Ferox          home      14 / 40   now     3,148 / 4,000  1 of 2 FULL 1 battery full · 6 elec│
+│Ionised Rain        planet    0 / 12    2h 10m  1,750 / 1,750  FULL        2 batteries full · 4 so│
+│Home Freighter      freighter -         -       -                          -                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌ FLEET ───────────────────────────────────────────────────────────────────────────────────────────┐
+│#  Type       Length     Frigates Events Elapsed  Status                                          │
+│1  Trade      Very long  5        16/18  17h 30m  waiting since 20:58                             │
+│2  Combat     Short      3        4/6    40m      about 25m left                                  │
+│                                                                                                  │
+│Offers: 3 of 5 left · new in 2h 45m (00:00 UTC)                                                   │
+│Rooms: 6 of 8 free · 17 of 25 frigates at home                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌ LOG ─────────────────────────────────────────────────────────────────────────────────────────────┐
+│21:14  Save written: slot 1 Auto                                                                  │
+│21:14  Snapshot saved: 2026-09-15T21-14-02-slot1-auto                                             │
+│20:58  Fleet: expedition 1 (Trade) is waiting for your decision since 20:58                       │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Each section is a framed box holding one of the REPL's tables: a bar of column names over rows on the deep-space navy. Sections share the height between them, so a screen too short for everything trims each one rather than starving the ones at the bottom, and the log keeps whatever is left over. The bases and the fleet carry the same columns and the same cell text as the `base` and `fleet` overviews, so what you read on the dashboard is what those commands print, with a `Next` column added for the soonest harvest. Below about 150 columns the two panels stack so each keeps its full width; above that they sit side by side. Keys: `:` or Enter drops to the prompt, `q` quits, and any other key clears the new-alert markers.
+
+The dashboard is drawn in the terminal's own buffer, not a separate screen, and leaves the bottom rows clear. Pressing `:` puts the prompt on the first of those rows with the dashboard still above it, so a command's output scrolls the dashboard up the way any other output would, and a short answer sits under a dashboard you can still read. A reminder of the way back prints with the prompt:
+
+```
+ NMS Copilot   Euclid · at Base Ferox · save 21:14 (10m ago) · watching slot 1                     q quit  : prompt
+   ... dashboard ...
+  An empty line or "dash" returns to the dashboard · "help" lists commands · "exit" quits
+[Euclid | 644 planets] 🚀 fleet 1
+```
+
+An empty line or `dash` returns to the dashboard, which is redrawn at the top of a blank screen with everything before it kept in the scrollback. `exit` and `quit` end the program from either mode. `nms-copilot --prompt` starts at the prompt instead, as does `start = false` in the config; then an empty line stays at the prompt and only `dash` opens the dashboard.
+
+```toml
+[dashboard]
+start = true                          # open into the dashboard; false starts at the prompt
+tick_secs = 60                        # how often alerts are re-checked against the clock
+bell = true                           # ring the terminal bell on a new alert
+log_lines = 20                        # lines kept in the log panel
+```
 
 ---
 

@@ -2,7 +2,7 @@
 //!
 //! Every placed object at a base carries a 64-bit `UserData` field. For the object types decoded here the meaningful value sits in the high 32 bits (`UserData >> 32`); the low 32 bits are zero on all of them in the saves examined. `Timestamp` on every object is rewritten to the save time whenever the game saves, so it is the snapshot instant for the value.
 //!
-//! Crops store seconds of growth accumulated at the snapshot, capped at the crop's growth time. Supply depots and extractors store the units that object holds times [`INDUSTRY_SCALE`]; the game splits a pipe network's pool evenly across every member, each capped at its own capacity, so members below their cap share one value. Batteries store their charge directly. These rules were verified against two saves and an in-game reading; see the arc02 plan under `docs/plans`.
+//! Crops store seconds of growth accumulated at the snapshot, capped at the crop's growth time. Supply depots and extractors store the units that object holds times [`INDUSTRY_SCALE`], and a network's total is the sum over its members. Every depot on a network carries one value and every extractor another, so a member's value says which kind it is, not which network it is on; which machines share a network comes from the pipes instead, in [`crate::pipes`]. Batteries store their charge directly. See `docs/reference/nms-save-notes.md`.
 //!
 //! Nothing here reads the clock: every time-dependent method takes `now` as Unix seconds so results are deterministic in tests.
 
@@ -169,7 +169,7 @@ pub struct Depot {
     pub units: u32,
     /// Units this depot can hold.
     pub capacity: u32,
-    /// 1-based index of the pipe network within the base, assigned by shared value.
+    /// 1-based index of the pipe network within the base, from the pipes that join it.
     pub network: u32,
     /// Snapshot instant, Unix seconds.
     pub snapshot: i64,
@@ -308,52 +308,62 @@ pub struct BaseObjects {
 }
 
 /// The fields of a save-file base object that decoding needs.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct RawBaseObject<'a> {
     pub object_id: &'a str,
     /// Unix seconds.
     pub timestamp: i64,
     pub user_data: u64,
+    /// Where the object stands, relative to the base.
+    pub position: [f32; 3],
+    /// A unit orientation vector, except on a line part where it is the run itself. See [`crate::pipes`].
+    pub at: [f32; 3],
 }
 
 impl BaseObjects {
     /// Decode a base's object list.
     ///
-    /// Depots and extractors that carry the same raw value are put on the same pipe network, since the game writes one shared per-member amount to every member below its cap. Two separate networks that happen to hold the same amount, such as two full ones, are merged by this rule.
+    /// Which depots and extractors share a pipe network is worked out from the pipes themselves, by [`crate::pipes::networks`]; nothing in the object list records it.
     pub fn decode<'a>(objects: impl IntoIterator<Item = RawBaseObject<'a>>) -> Self {
         let mut out = BaseObjects::default();
-        let mut network_values: Vec<u64> = Vec::new();
-        let mut network_for = |value: u64| -> u32 {
-            match network_values.iter().position(|v| *v == value) {
-                Some(i) => i as u32 + 1,
-                None => {
-                    network_values.push(value);
-                    network_values.len() as u32
-                }
-            }
-        };
+        // Machines in the order they are met, so networks come out numbered in save order, and the row each one filled while its network was still unknown.
+        let mut attachments: Vec<crate::pipes::Attachment> = Vec::new();
+        let mut slots: Vec<MachineSlot> = Vec::new();
+        let mut segments: Vec<crate::pipes::Segment> = Vec::new();
 
         for obj in objects {
             let value = obj.user_data >> 32;
             let value32 = u32::try_from(value).unwrap_or(u32::MAX);
             match obj.object_id {
-                "^U_SILO_S" => out.depots.push(Depot {
-                    units: scaled_units(value, DEPOT_CAPACITY),
-                    capacity: DEPOT_CAPACITY,
-                    network: network_for(value),
-                    snapshot: obj.timestamp,
-                }),
+                "^U_SILO_S" => {
+                    attachments.push(crate::pipes::Attachment {
+                        position: obj.position,
+                        connector: crate::pipes::DEPOT_CONNECTOR,
+                    });
+                    slots.push(MachineSlot::Depot(out.depots.len()));
+                    out.depots.push(Depot {
+                        units: scaled_units(value, DEPOT_CAPACITY),
+                        capacity: DEPOT_CAPACITY,
+                        network: 0,
+                        snapshot: obj.timestamp,
+                    });
+                }
                 "^U_EXTRACTOR_S" | "^U_GASEXTRACTOR" => {
                     let kind = if obj.object_id == "^U_GASEXTRACTOR" {
                         ExtractorKind::Gas
                     } else {
                         ExtractorKind::Mineral
                     };
+                    attachments.push(crate::pipes::Attachment {
+                        position: obj.position,
+                        connector: crate::pipes::EXTRACTOR_CONNECTOR,
+                    });
+                    slots.push(MachineSlot::Extractor(out.extractors.len()));
                     out.extractors.push(Extractor {
                         kind,
                         units: scaled_units(value, EXTRACTOR_CAPACITY),
                         capacity: EXTRACTOR_CAPACITY,
-                        network: network_for(value),
+                        network: 0,
                         snapshot: obj.timestamp,
                     });
                 }
@@ -362,7 +372,12 @@ impl BaseObjects {
                     capacity: BATTERY_CAPACITY,
                 }),
                 "^U_POWERLINE" => out.wires += 1,
-                "^U_PIPELINE" => out.pipes += 1,
+                "^U_PIPELINE" => {
+                    out.pipes += 1;
+                    if let Some(segment) = crate::pipes::Segment::run(obj.position, obj.at) {
+                        segments.push(segment);
+                    }
+                }
                 id => {
                     if let Some(kind) = GeneratorKind::from_object_id(id) {
                         out.generators.push(Generator { kind, raw: value32 });
@@ -384,6 +399,16 @@ impl BaseObjects {
                         out.other += 1;
                     }
                 }
+            }
+        }
+
+        for (slot, network) in slots
+            .iter()
+            .zip(crate::pipes::networks(&segments, &attachments))
+        {
+            match *slot {
+                MachineSlot::Depot(i) => out.depots[i].network = network,
+                MachineSlot::Extractor(i) => out.extractors[i].network = network,
             }
         }
         out
@@ -481,6 +506,11 @@ pub struct Network {
 }
 
 impl Network {
+    /// The network's letter, for telling a base's networks apart in a listing.
+    pub fn label(&self) -> String {
+        crate::pipes::label(self.index)
+    }
+
     pub fn is_full(&self) -> bool {
         self.capacity > 0 && self.stored >= self.capacity
     }
@@ -493,6 +523,13 @@ impl Network {
             (f64::from(self.stored) / f64::from(self.capacity)).clamp(0.0, 1.0)
         }
     }
+}
+
+/// Where a machine's row went while its network was still unknown.
+#[derive(Debug, Clone, Copy)]
+enum MachineSlot {
+    Depot(usize),
+    Extractor(usize),
 }
 
 /// A planter object not in the crop table. Freighter planter rooms are excluded because they use a different encoding.
@@ -517,6 +554,7 @@ mod tests {
             object_id,
             timestamp: SNAPSHOT,
             user_data: hi << 32,
+            ..Default::default()
         }
     }
 
@@ -534,6 +572,7 @@ mod tests {
             object_id: "^SNOWPLANT",
             timestamp: SNAPSHOT,
             user_data: 15_461_882_265_600,
+            ..Default::default()
         }]);
         let crop = &objects.crops[0];
         assert_eq!(crop.kind, Some(CropKind::FrostCrystal));
@@ -597,16 +636,19 @@ mod tests {
                 object_id: "^U_SILO_S",
                 timestamp: SNAPSHOT,
                 user_data: 6_184_752_906_240_000,
+                ..Default::default()
             },
             RawBaseObject {
                 object_id: "^U_EXTRACTOR_S",
                 timestamp: SNAPSHOT,
                 user_data: 1_546_188_226_560_000,
+                ..Default::default()
             },
             RawBaseObject {
                 object_id: "^U_BATTERY_S",
                 timestamp: SNAPSHOT,
                 user_data: 193_273_528_320_000,
+                ..Default::default()
             },
         ]);
         assert_eq!(objects.depots[0].units, 1000);
@@ -616,31 +658,88 @@ mod tests {
         assert!(objects.batteries[0].is_full());
     }
 
+    /// One machine standing at `position`.
+    fn machine(object_id: &str, hi: u64, position: [f32; 3]) -> RawBaseObject<'_> {
+        RawBaseObject {
+            object_id,
+            timestamp: SNAPSHOT,
+            user_data: hi << 32,
+            position,
+            at: [0.0, 0.0, 1.0],
+        }
+    }
+
+    /// A pipe laid from `from` to `to`, recorded the way the game records it: `At` is the run plus a one-unit overshoot.
+    fn pipe(from: [f32; 3], to: [f32; 3]) -> RawBaseObject<'static> {
+        let run = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+        let len = (run[0] * run[0] + run[1] * run[1] + run[2] * run[2]).sqrt();
+        RawBaseObject {
+            object_id: "^U_PIPELINE",
+            timestamp: SNAPSHOT,
+            position: from,
+            at: [
+                run[0] + run[0] / len,
+                run[1] + run[1] / len,
+                run[2] + run[2] / len,
+            ],
+            ..Default::default()
+        }
+    }
+
     #[test]
-    fn networks_group_by_shared_value_across_depots_and_extractors() {
+    fn networks_come_from_the_pipes_not_from_equal_values() {
+        use crate::pipes::{DEPOT_CONNECTOR, EXTRACTOR_CONNECTOR};
+        // Two networks whose members all sit at their caps, so every depot carries one value and every extractor another. Grouping by value would give one network of depots and one of extractors; the pipes give the real pair.
         let objects = BaseObjects::decode([
-            raw("^U_GASEXTRACTOR", 40_986),
-            raw("^U_SILO_S", 40_986),
-            raw("^U_SILO_S", 47_201),
-            raw("^U_EXTRACTOR_S", 47_201),
-            raw("^U_SILO_S", 40_986),
-            raw("^U_GASEXTRACTOR", 48_540),
+            machine("^U_GASEXTRACTOR", 360_000, [0.0, 0.0, 0.0]),
+            machine("^U_SILO_S", 1_440_000, [20.0, 0.0, 0.0]),
+            machine("^U_EXTRACTOR_S", 360_000, [0.0, 0.0, 60.0]),
+            machine("^U_SILO_S", 1_440_000, [20.0, 0.0, 60.0]),
+            pipe(
+                [EXTRACTOR_CONNECTOR, 0.0, 0.0],
+                [20.0 - DEPOT_CONNECTOR, 0.0, 0.0],
+            ),
+            pipe(
+                [EXTRACTOR_CONNECTOR, 0.0, 60.0],
+                [20.0 - DEPOT_CONNECTOR, 0.0, 60.0],
+            ),
         ]);
-        assert_eq!(objects.extractors[0].network, 1);
+        assert_eq!(objects.network_count(), 2);
         assert_eq!(objects.extractors[0].kind, ExtractorKind::Gas);
+        assert_eq!(objects.extractors[0].network, 1);
         assert_eq!(objects.depots[0].network, 1);
-        assert_eq!(objects.depots[1].network, 2);
         assert_eq!(objects.extractors[1].network, 2);
-        assert_eq!(objects.depots[2].network, 1);
-        assert_eq!(objects.extractors[2].network, 3);
-        assert_eq!(objects.network_count(), 3);
-        assert_eq!(objects.depots[0].units, 28);
-        assert_eq!(objects.extractors[2].units, 33);
+        assert_eq!(objects.depots[1].network, 2);
+        let networks = objects.networks();
+        assert_eq!(networks[0].label(), "A");
+        assert_eq!(networks[1].label(), "B");
+        assert_eq!(networks[0].capacity, 1_250);
+        assert!(networks.iter().all(Network::is_full));
+    }
+
+    #[test]
+    fn depots_standing_together_share_a_network_without_a_pipe() {
+        let objects = BaseObjects::decode([
+            machine("^U_SILO_S", 720_000, [0.0, 0.0, 0.0]),
+            machine("^U_SILO_S", 720_000, [1.5, 0.0, 0.0]),
+            machine("^U_SILO_S", 720_000, [40.0, 0.0, 0.0]),
+        ]);
+        assert_eq!(objects.network_count(), 2);
+        assert_eq!(objects.depots[0].network, 1);
+        assert_eq!(objects.depots[1].network, 1, "touching its neighbour");
+        assert_eq!(objects.depots[2].network, 2, "too far to touch anything");
+    }
+
+    #[test]
+    fn a_depot_with_no_geometry_is_still_a_network() {
+        let objects = BaseObjects::decode([raw("^U_SILO_S", 154_712)]);
+        assert_eq!(objects.network_count(), 1);
+        assert_eq!(objects.depots[0].network, 1);
     }
 
     #[test]
     fn network_totals_match_in_game_reading() {
-        // Farm nitrogen network at 1789402087: 3 gas extractors + 4 depots all at 154,712; the game showed 750 of 4,750.
+        // Farm nitrogen network at 1789402087: 3 gas extractors + 4 depots all at 154,712; the game showed 750 of 4,750. Everything stands at the origin, so the machines chain by touching and form the one network.
         let mut raws = vec![raw("^U_GASEXTRACTOR", 154_712); 3];
         raws.extend(vec![raw("^U_SILO_S", 154_712); 4]);
         let objects = BaseObjects::decode(raws);

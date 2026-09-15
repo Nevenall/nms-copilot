@@ -138,7 +138,7 @@ pub fn dispatch(
 
         Action::Help => Ok(help_text()),
 
-        Action::Map | Action::Exit | Action::Quit => Ok(String::new()),
+        Action::Map | Action::Dash | Action::Exit | Action::Quit => Ok(String::new()),
 
         Action::Convert {
             glyphs,
@@ -710,6 +710,7 @@ Commands:
   find       Search planets by biome, distance, name
   list       List galaxies, biomes, glyphs, bases, systems, terrain-types
   map        Open interactive galaxy map
+  dash       Return to the dashboard (an empty line does the same)
   route      Plan a route through discovered systems
   show       Show system or base details
   base       Show crops, extraction networks, and power at your bases
@@ -725,6 +726,7 @@ Commands:
   exit/quit  Exit the REPL
 
 Live updates are shown between commands when file watching is enabled.
+The dashboard shows them as they happen: press : or Enter there to come back to the prompt.
 
 Examples:
   find --biome Lush --nearest 5

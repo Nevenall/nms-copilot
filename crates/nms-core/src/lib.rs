@@ -8,6 +8,7 @@ pub mod discovery;
 pub mod fleet;
 pub mod galaxy;
 pub mod glyph;
+pub mod pipes;
 pub mod player;
 pub mod system;
 

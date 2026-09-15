@@ -31,8 +31,8 @@ impl CopilotCompleter {
 }
 
 const COMMANDS: &[&str] = &[
-    "backup", "base", "convert", "exit", "find", "fleet", "help", "info", "list", "map", "quit",
-    "reset", "route", "set", "show", "stats", "status",
+    "backup", "base", "convert", "dash", "exit", "find", "fleet", "help", "info", "list", "map",
+    "quit", "reset", "route", "set", "show", "stats", "status",
 ];
 
 const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];

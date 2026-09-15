@@ -4,7 +4,7 @@
 //! Commands like `find` and `route` use this state as defaults when
 //! explicit flags are not provided.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,10 +19,25 @@ use nms_save::locate::SaveFile;
 
 /// Current Unix time in seconds.
 pub fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    unix_secs(SystemTime::now())
+}
+
+/// A system time as Unix seconds, zero for anything before the epoch.
+pub fn unix_secs(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// Lines the log panel keeps by default.
+pub const DEFAULT_LOG_LINES: usize = 20;
+
+/// One line of the session log: a notice with the time it was recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogLine {
+    /// Unix seconds.
+    pub at: i64,
+    pub text: String,
 }
 
 /// Mutable session state maintained across REPL commands.
@@ -60,6 +75,16 @@ pub struct SessionState {
 
     /// The save the session follows, when it is a game save; `None` for a JSON export.
     pub save_file: Option<SaveFile>,
+
+    /// When the followed save was last written, Unix seconds: its modification time at startup, then each write the watcher reports.
+    pub save_written: Option<i64>,
+
+    /// Whether a watcher is reporting save writes to this session.
+    pub watching: bool,
+
+    /// The most recent notices, oldest first, capped at `log_capacity`.
+    log: VecDeque<LogLine>,
+    log_capacity: usize,
 }
 
 /// Where the user's reference position is anchored.
@@ -119,10 +144,16 @@ impl SessionState {
             backup_enabled: false,
             backup_policy: None,
             save_file: None,
+            save_written: None,
+            watching: false,
+            log: VecDeque::new(),
+            log_capacity: DEFAULT_LOG_LINES,
         }
     }
 
     /// Set up backups for this session: where they go, whether automatic snapshots start on, and which save is followed.
+    ///
+    /// When the path is a game save its modification time seeds `save_written`.
     pub fn configure_backups(
         &mut self,
         policy: BackupPolicy,
@@ -132,6 +163,31 @@ impl SessionState {
         self.backup_policy = Some(policy);
         self.backup_enabled = enabled;
         self.save_file = save_path.and_then(|p| SaveFile::from_path(p).ok());
+        self.save_written = self.save_file.as_ref().map(|f| unix_secs(f.modified()));
+    }
+
+    /// Keep this many log lines; older lines are dropped as new ones arrive.
+    pub fn set_log_capacity(&mut self, lines: usize) {
+        self.log_capacity = lines.max(1);
+        while self.log.len() > self.log_capacity {
+            self.log.pop_front();
+        }
+    }
+
+    /// Add a notice to the log at `now`.
+    pub fn record(&mut self, now: i64, text: impl Into<String>) {
+        if self.log.len() >= self.log_capacity {
+            self.log.pop_front();
+        }
+        self.log.push_back(LogLine {
+            at: now,
+            text: text.into(),
+        });
+    }
+
+    /// The kept notices, oldest first.
+    pub fn log(&self) -> impl Iterator<Item = &LogLine> {
+        self.log.iter()
     }
 
     /// Recompute base alerts at `now` and return notices for alerts not announced before.
@@ -413,6 +469,21 @@ mod tests {
     }
 
     #[test]
+    fn test_log_keeps_the_newest_lines() {
+        let model = test_model();
+        let mut session = SessionState::from_model(&model);
+        session.set_log_capacity(2);
+        session.record(10, "one");
+        session.record(20, "two");
+        session.record(30, "three");
+        let lines: Vec<(i64, &str)> = session.log().map(|l| (l.at, l.text.as_str())).collect();
+        assert_eq!(lines, vec![(20, "two"), (30, "three")]);
+        session.set_log_capacity(1);
+        assert_eq!(session.log().count(), 1);
+        assert_eq!(session.log().next().unwrap().text, "three");
+    }
+
+    #[test]
     fn test_refresh_alerts_announces_once_and_rearms() {
         use nms_core::player::{BaseType, PlayerBase};
         use nms_core::{BaseObjects, RawBaseObject};
@@ -430,6 +501,7 @@ mod tests {
             object_id: "^SNOWPLANT",
             timestamp: snapshot,
             user_data: 3000 << 32,
+            ..Default::default()
         }]));
         model.insert_base(farm);
         let mut session = SessionState::from_model(&model);
@@ -467,6 +539,7 @@ mod tests {
             object_id: "^SNOWPLANT",
             timestamp: snapshot + 700,
             user_data: 0,
+            ..Default::default()
         }]));
         model.insert_base(farm);
         assert!(session.refresh_alerts(&model, snapshot + 800).is_empty());

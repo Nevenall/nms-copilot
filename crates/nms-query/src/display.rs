@@ -461,6 +461,26 @@ pub fn format_snapshot(snapshot: i64, now: i64) -> String {
     format!("{local} ({} ago)", format_duration(now - snapshot))
 }
 
+/// A duration to the minute below ten minutes and to five-minute steps above, so a display that shows it changes only a few times an hour: `< 1m`, `7m`, `2h 10m`, `1d 03h`.
+pub fn format_duration_coarse(secs: i64) -> String {
+    let minutes = secs.max(0) / 60;
+    let minutes = if minutes < 10 {
+        minutes
+    } else {
+        minutes - minutes % 5
+    };
+    format_duration(minutes * 60)
+}
+
+/// How long ago an instant was, at the coarse granularity: `just now`, `7m ago`, `2h 10m ago`.
+pub fn format_ago(secs: i64) -> String {
+    if secs < 60 {
+        "just now".to_string()
+    } else {
+        format!("{} ago", format_duration_coarse(secs))
+    }
+}
+
 /// Insert thousands separators: `4750` becomes `4,750`.
 pub fn thousands(n: u32) -> String {
     let digits = n.to_string();
@@ -484,7 +504,8 @@ pub fn base_type_label(bt: &nms_core::BaseType) -> String {
     }
 }
 
-fn crops_cell(status: &BaseStatus) -> String {
+/// The Crops column of the base overview: plants ready of plants planted, or a dash.
+pub fn crops_cell(status: &BaseStatus) -> String {
     if status.crops_total == 0 {
         "-".to_string()
     } else {
@@ -492,7 +513,8 @@ fn crops_cell(status: &BaseStatus) -> String {
     }
 }
 
-fn extraction_cell(status: &BaseStatus) -> String {
+/// The Extraction column of the base overview: units stored of capacity across the base's networks, with how many are full.
+pub fn extraction_cell(status: &BaseStatus) -> String {
     if status.networks.is_empty() {
         return "-".to_string();
     }
@@ -510,7 +532,8 @@ fn extraction_cell(status: &BaseStatus) -> String {
     cell
 }
 
-fn power_cell(power: &PowerSummary) -> String {
+/// The Power column of the base overview: batteries and their state, then the generators by kind.
+pub fn power_cell(power: &PowerSummary) -> String {
     let mut parts: Vec<String> = Vec::new();
     if power.batteries > 0 {
         let noun = if power.batteries == 1 {
@@ -690,7 +713,7 @@ pub fn format_base_detail(
                 format!("{:.0}%", net.fill() * 100.0)
             };
             builder.push_record([
-                net.index.to_string(),
+                net.label(),
                 extractors,
                 net.depots.to_string(),
                 thousands(net.stored),
@@ -775,9 +798,11 @@ pub fn format_alert_line(alerts: &[Alert]) -> String {
     let full: Vec<String> = alerts
         .iter()
         .filter_map(|a| match &a.kind {
-            AlertKind::DepotsFull { network, .. } => {
-                Some(format!("{} (network {network})", a.base))
-            }
+            AlertKind::DepotsFull { network, .. } => Some(format!(
+                "{} (network {})",
+                a.base,
+                nms_core::pipes::label(*network)
+            )),
             _ => None,
         })
         .collect();
@@ -1598,7 +1623,21 @@ mod tests {
                 object_id,
                 timestamp: SNAPSHOT,
                 user_data: hi << 32,
+                ..Default::default()
             }
+        }
+
+        /// A machine standing at `position`. Machines within two units of each other chain into one network.
+        fn raw_at(object_id: &str, hi: u64, position: [f32; 3]) -> RawBaseObject<'_> {
+            RawBaseObject {
+                position,
+                ..raw(object_id, hi)
+            }
+        }
+
+        /// The nth machine of a touching row laid along x.
+        fn in_a_row(object_id: &str, hi: u64, nth: usize) -> RawBaseObject<'_> {
+            raw_at(object_id, hi, [nth as f32 * 1.5, 0.0, 0.0])
         }
 
         fn model() -> GalaxyModel {
@@ -1606,9 +1645,10 @@ mod tests {
             raws.extend(vec![raw("^SNOWPLANT", 3600); 16]);
             raws.extend(vec![raw("^BARRENPLANT", 3927); 13]);
             raws.extend(vec![raw("^BARRENPLANT", 30_000); 3]);
-            raws.extend(vec![raw("^U_GASEXTRACTOR", 154_712); 3]);
-            raws.extend(vec![raw("^U_SILO_S", 154_712); 4]);
-            raws.push(raw("^U_SILO_S", 1_440_000));
+            // Three extractors and four depots in one touching row, then a full depot standing well clear of them.
+            raws.extend((0..3).map(|n| in_a_row("^U_GASEXTRACTOR", 154_712, n)));
+            raws.extend((3..7).map(|n| in_a_row("^U_SILO_S", 154_712, n)));
+            raws.push(raw_at("^U_SILO_S", 1_440_000, [40.0, 0.0, 0.0]));
             raws.push(raw("^U_BATTERY_S", 45_000));
             raws.extend(vec![raw("^U_GENERATOR_S", 0); 4]);
             raws.extend(vec![raw("^U_POWERLINE", 0); 30]);
@@ -1773,7 +1813,7 @@ mod tests {
             let alerts = crate::base::current_alerts(&model(), SNAPSHOT);
             assert_eq!(
                 format_alert_line(&alerts),
-                "Ready: 16 Frost Crystal at Farm. Full depots: Farm (network 2)."
+                "Ready: 16 Frost Crystal at Farm. Full depots: Farm (network B)."
             );
             assert_eq!(format_alert_line(&[]), "Ready: nothing. Full depots: none.");
             let indicator = format_alert_indicator(&AlertSummary::from_alerts(&alerts));
@@ -1881,5 +1921,27 @@ mod backup_tests {
             format_backup_list("st_1", &[], &nms_theme_no_color()),
             "No backups for st_1.\n"
         );
+    }
+
+    #[test]
+    fn test_format_duration_coarse_steps() {
+        assert_eq!(format_duration_coarse(59), "< 1m");
+        assert_eq!(format_duration_coarse(61), "1m");
+        assert_eq!(format_duration_coarse(9 * 60 + 59), "9m");
+        assert_eq!(format_duration_coarse(10 * 60), "10m");
+        assert_eq!(format_duration_coarse(14 * 60 + 59), "10m");
+        assert_eq!(format_duration_coarse(15 * 60), "15m");
+        assert_eq!(format_duration_coarse(2 * 3600 + 13 * 60), "2h 10m");
+        assert_eq!(format_duration_coarse(27 * 3600 + 7 * 60), "1d 03h");
+        assert_eq!(format_duration_coarse(-5), "< 1m");
+    }
+
+    #[test]
+    fn test_format_ago() {
+        assert_eq!(format_ago(0), "just now");
+        assert_eq!(format_ago(59), "just now");
+        assert_eq!(format_ago(60), "1m ago");
+        assert_eq!(format_ago(12 * 60 + 30), "10m ago");
+        assert_eq!(format_ago(3 * 3600 + 26 * 60), "3h 25m ago");
     }
 }

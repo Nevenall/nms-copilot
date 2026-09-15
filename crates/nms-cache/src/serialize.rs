@@ -48,7 +48,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
 const CACHE_MAGIC: &[u8; 4] = b"NMSC";
 
 /// Version of the archived data. Bump whenever an archived type changes shape, or whenever a decoding rule that feeds archived data changes (base objects are stored decoded), so caches written by an older binary are rebuilt instead of trusted.
-pub const CACHE_FORMAT_VERSION: u32 = 4;
+pub const CACHE_FORMAT_VERSION: u32 = 5;
 
 const HEADER_LEN: usize = CACHE_MAGIC.len() + 4;
 
@@ -341,11 +341,13 @@ mod tests {
                 object_id: "^SNOWPLANT",
                 timestamp: 1789279852,
                 user_data: 15461882265600,
+                ..Default::default()
             },
             RawBaseObject {
                 object_id: "^U_SILO_S",
                 timestamp: 1789279852,
                 user_data: 6184752906240000,
+                ..Default::default()
             },
         ]);
         model.insert_base(base.clone());

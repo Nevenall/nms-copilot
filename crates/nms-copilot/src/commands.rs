@@ -174,6 +174,9 @@ pub enum Action {
     /// Open interactive galaxy map.
     Map,
 
+    /// Return to the dashboard.
+    Dash,
+
     /// Snapshot the save now, turn automatic snapshots on or off, or list what is kept.
     Backup {
         /// "on", "off", or "list"; omit to take a snapshot now.
@@ -646,6 +649,12 @@ mod tests {
     fn test_parse_map() {
         let action = parse_line("map").unwrap().unwrap();
         assert!(matches!(action, Action::Map));
+    }
+
+    #[test]
+    fn test_parse_dash() {
+        let action = parse_line("dash").unwrap().unwrap();
+        assert!(matches!(action, Action::Dash));
     }
 
     #[test]

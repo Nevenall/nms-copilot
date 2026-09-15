@@ -1,57 +1,137 @@
 //! Watch integration for the REPL.
 //!
-//! Drains pending file-watcher events between prompts: deltas are applied to
-//! the galaxy model and session state, with an optional write-through to the
-//! cache; save writes are snapshotted when automatic backups are on.
-//! Notifications are returned as strings for the REPL to print.
+//! Both modes of the REPL, the prompt and the dashboard, keep the model and the session current through the same two steps: [`drain`] takes what the watcher has reported, and [`sync`] applies it, snapshots save writes when automatic backups are on, re-checks the alerts against the clock, and records every notice in the session log. Notices are returned as strings for the caller to show.
 
 use std::path::Path;
 use std::sync::mpsc;
 
 use nms_core::delta::SaveDelta;
 use nms_graph::GalaxyModel;
+use nms_save::backup::SnapshotOutcome;
 use nms_save::locate::SaveFile;
 use nms_watch::WatchEvent;
+use tokio::sync::RwLock;
 
-use crate::session::{PositionContext, SessionState};
+use crate::session::{PositionContext, SessionState, unix_secs};
 
-/// Drain all pending events from the watcher: apply deltas to the model and snapshot save writes.
+/// What a mode needs to keep the model current: the watcher's receiver, when there is one, and where to write the cache.
+#[derive(Debug, Clone, Copy)]
+pub struct WatchContext<'a> {
+    pub receiver: Option<&'a mpsc::Receiver<WatchEvent>>,
+    pub cache_path: Option<&'a Path>,
+    pub save_version: u32,
+}
+
+impl WatchContext<'_> {
+    /// Drain and sync in one step, for callers with nothing to do in between.
+    pub fn sync_now(
+        &self,
+        model: &RwLock<GalaxyModel>,
+        session: &mut SessionState,
+        now: i64,
+    ) -> SyncReport {
+        let events = drain(self.receiver);
+        sync(
+            model,
+            session,
+            events,
+            self.cache_path,
+            self.save_version,
+            now,
+        )
+    }
+}
+
+/// Everything the watcher has reported since the last drain, in order. Takes no lock and never blocks.
+pub fn drain(receiver: Option<&mpsc::Receiver<WatchEvent>>) -> Vec<WatchEvent> {
+    let mut events = Vec::new();
+    if let Some(receiver) = receiver {
+        while let Ok(event) = receiver.try_recv() {
+            events.push(event);
+        }
+    }
+    events
+}
+
+/// What one sync produced.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct SyncReport {
+    /// Notices in the order they happened: save writes, snapshots, warps, discoveries, then alerts that just came due.
+    pub notes: Vec<String>,
+    /// How many of the notes are alerts that had not been announced before.
+    pub new_alerts: usize,
+}
+
+/// Apply drained events and re-check the alerts at `now`.
 ///
-/// Prints notifications for each delta, and a warning when a snapshot fails. If any deltas were applied and
-/// `cache_path` is provided, writes an updated cache.
-pub fn drain_watch_events(
-    receiver: &mpsc::Receiver<WatchEvent>,
-    model: &mut GalaxyModel,
+/// Deltas are applied under the model's write lock, held only for as long as that takes; the alert refresh takes the read lock. When any delta was applied and `cache_path` is given, the cache is rewritten. Every notice is recorded in the session log before it is returned.
+pub fn sync(
+    model: &RwLock<GalaxyModel>,
     session: &mut SessionState,
+    events: Vec<WatchEvent>,
     cache_path: Option<&Path>,
     save_version: u32,
-) {
+    now: i64,
+) -> SyncReport {
+    let mut notes = Vec::new();
     let mut any_delta = false;
-
-    while let Ok(event) = receiver.try_recv() {
-        match event {
-            WatchEvent::Delta(delta) => {
-                let notifications = apply_and_notify(model, session, &delta);
-                for note in &notifications {
-                    println!("{note}");
-                }
-                any_delta = true;
-            }
+    let deltas: Vec<SaveDelta> = events
+        .into_iter()
+        .filter_map(|event| match event {
             WatchEvent::SaveWritten(file) => {
-                if let Some(warning) = auto_backup(session, &file) {
-                    eprintln!("{warning}");
-                }
+                notes.extend(save_written(session, &file));
+                None
+            }
+            WatchEvent::Delta(delta) => Some(delta),
+        })
+        .collect();
+
+    if !deltas.is_empty() {
+        let mut guard = model.blocking_write();
+        for delta in &deltas {
+            notes.extend(
+                apply_and_notify(&mut guard, session, delta)
+                    .into_iter()
+                    .map(|n| n.trim_start().to_string()),
+            );
+            any_delta = true;
+        }
+        if any_delta && let Some(path) = cache_path {
+            let data = nms_cache::extract_cache_data(&guard, save_version);
+            if let Err(e) = nms_cache::write_cache(&data, path) {
+                notes.push(format!("Warning: could not update cache: {e}"));
             }
         }
     }
 
-    // Write updated cache if any deltas were applied
-    if any_delta && let Some(path) = cache_path {
-        let data = nms_cache::extract_cache_data(model, save_version);
-        if let Err(e) = nms_cache::write_cache(&data, path) {
-            eprintln!("Warning: could not update cache: {e}");
-        }
+    let alerts = session.refresh_alerts(&model.blocking_read(), now);
+    let new_alerts = alerts.len();
+    notes.extend(alerts);
+
+    for note in &notes {
+        session.record(now, note.clone());
     }
+    SyncReport { notes, new_alerts }
+}
+
+/// Note a save the watcher saw written and snapshot it when automatic backups are on.
+fn save_written(session: &mut SessionState, file: &SaveFile) -> Vec<String> {
+    let mut notes = Vec::new();
+    let followed = session
+        .save_file
+        .as_ref()
+        .is_some_and(|f| f.slot() == file.slot());
+    if followed {
+        session.save_written = Some(unix_secs(file.modified()));
+    }
+    notes.push(format!(
+        "Save written: slot {} {}{}",
+        file.slot(),
+        file.save_type(),
+        if followed { "" } else { " (not followed)" }
+    ));
+    notes.extend(auto_backup(session, file));
+    notes
 }
 
 /// Apply a delta to the model and generate human-readable notifications.
@@ -116,23 +196,26 @@ pub fn apply_and_notify(
 
 /// Snapshot a save the watcher saw written, when automatic backups are on.
 ///
-/// Successful snapshots are silent; the returned line is a warning for a failed copy.
+/// A copy that was taken is noted; an unchanged file is silent; the returned line is a warning for a failed copy.
 pub fn auto_backup(session: &SessionState, file: &SaveFile) -> Option<String> {
     if !session.backup_enabled {
         return None;
     }
     let policy = session.backup_policy.as_ref()?;
     match policy.auto_snapshot(file) {
-        Ok(_) => None,
+        Ok(SnapshotOutcome::Taken(snapshot)) => {
+            Some(format!("Snapshot saved: {}", snapshot.folder_name()))
+        }
+        Ok(SnapshotOutcome::Unchanged(_)) => None,
         Err(e) => Some(format!(
-            "  Warning: backup of {} failed: {e}",
+            "Warning: backup of {} failed: {e}",
             file.path().display()
         )),
     }
 }
 
 /// Look up the name of the nearest system to an address.
-fn system_name_near(model: &GalaxyModel, addr: &nms_core::address::GalacticAddress) -> String {
+pub fn system_name_near(model: &GalaxyModel, addr: &nms_core::address::GalacticAddress) -> String {
     model
         .nearest_systems(addr, 1)
         .first()
@@ -148,6 +231,7 @@ mod tests {
     use nms_core::address::GalacticAddress;
     use nms_core::delta::PlayerMoved;
     use nms_core::system::System;
+    use nms_watch::WatchEvent;
 
     fn test_model() -> GalaxyModel {
         let json = r#"{
@@ -287,23 +371,33 @@ mod tests {
         assert!(notes.iter().any(|n| n.contains("New Outpost")));
     }
 
-    #[test]
-    fn test_drain_watch_events_no_pending() {
-        let (_tx, rx) = mpsc::channel::<WatchEvent>();
-        let mut model = test_model();
-        let mut session = SessionState::from_model(&model);
-
-        // No events pending, should not panic or change anything
-        let count_before = session.system_count;
-        drain_watch_events(&rx, &mut model, &mut session, None, 0);
-        assert_eq!(session.system_count, count_before);
+    fn shared(model: GalaxyModel) -> RwLock<GalaxyModel> {
+        RwLock::new(model)
     }
 
     #[test]
-    fn test_drain_watch_events_applies_delta() {
+    fn test_drain_without_receiver_or_events_is_empty() {
+        assert!(drain(None).is_empty());
+        let (_tx, rx) = mpsc::channel::<WatchEvent>();
+        assert!(drain(Some(&rx)).is_empty());
+    }
+
+    #[test]
+    fn test_sync_with_nothing_pending_changes_nothing() {
+        let model = shared(test_model());
+        let mut session = SessionState::from_model(&model.blocking_read());
+        let count_before = session.system_count;
+        let report = sync(&model, &mut session, Vec::new(), None, 0, 1_000);
+        assert_eq!(report, SyncReport::default());
+        assert_eq!(session.system_count, count_before);
+        assert_eq!(session.log().count(), 0);
+    }
+
+    #[test]
+    fn test_sync_applies_a_delta_once_and_logs_it() {
         let (tx, rx) = mpsc::channel();
-        let mut model = test_model();
-        let mut session = SessionState::from_model(&model);
+        let model = shared(test_model());
+        let mut session = SessionState::from_model(&model.blocking_read());
         let count_before = session.system_count;
 
         let delta = SaveDelta {
@@ -317,10 +411,61 @@ mod tests {
             ..SaveDelta::empty()
         };
         tx.send(WatchEvent::Delta(delta)).unwrap();
-        drop(tx);
 
-        drain_watch_events(&rx, &mut model, &mut session, None, 0);
+        let report = sync(&model, &mut session, drain(Some(&rx)), None, 0, 1_000);
+        assert_eq!(
+            report.notes,
+            vec!["New system: Drain Test (0 planets)".to_string()]
+        );
+        assert_eq!(report.new_alerts, 0);
         assert_eq!(session.system_count, count_before + 1);
+        let logged: Vec<(i64, String)> = session.log().map(|l| (l.at, l.text.clone())).collect();
+        assert_eq!(
+            logged,
+            vec![(1_000, "New system: Drain Test (0 planets)".to_string())]
+        );
+
+        let again = sync(&model, &mut session, drain(Some(&rx)), None, 0, 1_060);
+        assert!(again.notes.is_empty(), "applied exactly once");
+        assert_eq!(session.system_count, count_before + 1);
+        assert_eq!(session.log().count(), 1);
+    }
+
+    #[test]
+    fn test_sync_announces_a_new_alert_once() {
+        use nms_core::player::{BaseType, PlayerBase};
+        use nms_core::{BaseObjects, RawBaseObject};
+
+        let snapshot = 1_789_402_087;
+        let mut model = test_model();
+        let farm = PlayerBase::new(
+            "Farm".into(),
+            BaseType::HomePlanetBase,
+            GalacticAddress::new(0, 0, 0, 1, 0, 0),
+            [0.0; 3],
+            None,
+        )
+        .with_objects(BaseObjects::decode([RawBaseObject {
+            object_id: "^SNOWPLANT",
+            timestamp: snapshot,
+            user_data: 3000 << 32,
+            ..Default::default()
+        }]));
+        model.insert_base(farm);
+        let model = shared(model);
+        let mut session = SessionState::from_model(&model.blocking_read());
+
+        let before = sync(&model, &mut session, Vec::new(), None, 0, snapshot);
+        assert_eq!(before.new_alerts, 0);
+
+        let due = sync(&model, &mut session, Vec::new(), None, 0, snapshot + 600);
+        assert_eq!(due.new_alerts, 1);
+        assert_eq!(due.notes, vec!["Farm: 1 Frost Crystal ready".to_string()]);
+        assert_eq!(session.log().count(), 1);
+
+        let later = sync(&model, &mut session, Vec::new(), None, 0, snapshot + 700);
+        assert_eq!(later, SyncReport::default());
+        assert_eq!(session.log().count(), 1);
     }
 
     fn backup_fixture() -> (tempfile::TempDir, SaveFile, nms_save::backup::BackupPolicy) {
@@ -338,37 +483,88 @@ mod tests {
     }
 
     #[test]
-    fn test_drain_watch_events_snapshots_save_written_when_backups_on() {
+    fn test_sync_notes_a_save_write_and_snapshots_it_when_backups_on() {
         let (_dir, file, policy) = backup_fixture();
-        let (tx, rx) = mpsc::channel();
-        let mut model = test_model();
-        let mut session = SessionState::from_model(&model);
+        let model = shared(test_model());
+        let mut session = SessionState::from_model(&model.blocking_read());
         session.configure_backups(policy.clone(), true, Some(file.path()));
-        tx.send(WatchEvent::SaveWritten(file)).unwrap();
-        drop(tx);
+        let written = crate::session::unix_secs(file.modified());
 
-        drain_watch_events(&rx, &mut model, &mut session, None, 0);
+        let report = sync(
+            &model,
+            &mut session,
+            vec![WatchEvent::SaveWritten(file)],
+            None,
+            0,
+            5_000,
+        );
+        assert_eq!(report.notes.len(), 2, "{:?}", report.notes);
+        assert_eq!(report.notes[0], "Save written: slot 1 Manual");
+        assert!(
+            report.notes[1].starts_with("Snapshot saved: "),
+            "{}",
+            report.notes[1]
+        );
+        assert_eq!(session.save_written, Some(written));
         assert_eq!(
             nms_save::backup::list(&policy.root, "st_1").unwrap().len(),
             1
         );
+        assert_eq!(session.log().count(), 2);
     }
 
     #[test]
-    fn test_drain_watch_events_ignores_save_written_when_backups_off() {
+    fn test_sync_notes_a_save_write_without_snapshot_when_backups_off() {
         let (_dir, file, policy) = backup_fixture();
-        let (tx, rx) = mpsc::channel();
-        let mut model = test_model();
-        let mut session = SessionState::from_model(&model);
+        let model = shared(test_model());
+        let mut session = SessionState::from_model(&model.blocking_read());
         session.configure_backups(policy.clone(), false, Some(file.path()));
-        tx.send(WatchEvent::SaveWritten(file)).unwrap();
-        drop(tx);
 
-        drain_watch_events(&rx, &mut model, &mut session, None, 0);
+        let report = sync(
+            &model,
+            &mut session,
+            vec![WatchEvent::SaveWritten(file)],
+            None,
+            0,
+            5_000,
+        );
+        assert_eq!(
+            report.notes,
+            vec!["Save written: slot 1 Manual".to_string()]
+        );
         assert!(
             nms_save::backup::list(&policy.root, "st_1")
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn test_sync_marks_a_write_to_another_slot() {
+        let (dir, file, policy) = backup_fixture();
+        let other_path = dir.path().join("st_1").join("save3.hg");
+        std::fs::write(&other_path, b"other").unwrap();
+        let other = SaveFile::from_path(&other_path).unwrap();
+        let model = shared(test_model());
+        let mut session = SessionState::from_model(&model.blocking_read());
+        session.configure_backups(policy, false, Some(file.path()));
+        let written_before = session.save_written;
+
+        let report = sync(
+            &model,
+            &mut session,
+            vec![WatchEvent::SaveWritten(other)],
+            None,
+            0,
+            5_000,
+        );
+        assert_eq!(
+            report.notes,
+            vec!["Save written: slot 2 Manual (not followed)".to_string()]
+        );
+        assert_eq!(
+            session.save_written, written_before,
+            "another slot does not move the followed save's time"
         );
     }
 

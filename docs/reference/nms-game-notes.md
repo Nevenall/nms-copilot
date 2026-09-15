@@ -49,10 +49,14 @@ Mechanics, object and item IDs, constants, and where to look them up. Tags are e
 
 ### Extraction
 
-- Mineral Extractor `^U_EXTRACTOR_S` and Gas Extractor `^U_GASEXTRACTOR` each buffer 250 units; Supply Depot `^U_SILO_S` holds 1,000. `[verified: the sum of per-object caps reproduces the game's "of 4,750" capacity line exactly]`
-- A pipe network shares one pool, split evenly across every member including extractors, each capped. When the smallest members fill, the rest keep filling. `[verified: in-game depot screen against the save, three networks, 2026-09-14]`
+- Mineral Extractor `^U_EXTRACTOR_S` and Gas Extractor `^U_GASEXTRACTOR` each buffer 250 units; Supply Depot `^U_SILO_S` holds 1,000. `[verified: the sum of per-object caps reproduces the game's "of 4,750" capacity line exactly]` `[community: the Miraheze Supply Depot article, "Each Supply Depot adds 1000 units of storage capacity (the extractors themselves store 250)"]`
+- A gas extractor and a mineral extractor share the same 250 cap. `[verified: both kinds plateau at exactly 360,000 = 250 × 1,440 across four bases of the sample, and the game's capacity line counts 250 for either kind]`
+- `^U_SILO_S` is the only depot part in the game, so every depot holds 1,000. `[game-data: AssistantNMS knows `U_SILO_S` as the Supply Depot and has no `U_SILO_M` or `U_SILO_L`, 2026-09-15]`
+- A pipe network is a Supply Grid in the game's own words, and resources reach the depots "in timed batches", so a depot and an extractor on one network need not hold the same amount at any instant. `[community: Miraheze wiki, Supply Depot article, current to Singularity]` `[verified: the save shows the two kinds carrying different values on one traced network]`
+- One Supply Pipe segment reaches at most 240 u; a longer run is a chain of segments, and a chain can also pass through a depot. `[community: Miraheze wiki, Supply Pipe article]` `[verified: the longest segment in the sample is 196.3 u]`
+- Which objects share a network is worked out from the pipe segments' endpoints, not from the depots and extractors; the rule is in [nms-save-notes.md](nms-save-notes.md#wires-pipes-and-cables-what-is-connected-to-what). `[verified: the reconstruction reproduces the Farm's three in-game networks, 2026-09-15]`
+- Depots built close together join into one network with no pipe between them, so a network can spread along a touching row. `[community: the save's owner reports having had to rebuild after placing two depots of different networks too close together, 2026-09-15]` `[verified: depots seen touching sit 1.40 to 1.83 apart and no reconstruction reproduces the Farm without treating them as joined]`
 - Extractors produce in real time while the player is away. Observed rate on the sample farm: about 33 units per hour per gas extractor on a nitrogen hotspot. `[verified: 79 units in 48 minutes across 3 extractors; rate depends on hotspot class and is a single observation]`
-- Only `^U_SILO_S` has been seen as a depot; whether every depot is 1,000 is `[open]`.
 
 ### Power
 
@@ -60,7 +64,7 @@ Mechanics, object and item IDs, constants, and where to look them up. Tags are e
 - Electromagnetic Generator `^U_GENERATOR_S`: placed on power hotspots, so it sits in clusters away from the rooms. Reads 0 in the save. `[verified: recipe database by ID; positions on the sample]`
 - Solar Panel `^U_SOLAR_S`. `[game-data: recipe database ID; not in the sample]`
 - Biofuel Reactor `^U_BIOGENERATOR`. `[game-data: recipe database ID; save value not decoded]`
-- Wires are `^U_POWERLINE` segments and pipes `^U_PIPELINE`. `[verified: sample]`
+- Wires are `^U_POWERLINE` (Electrical Wiring), pipes `^U_PIPELINE` (Supply Pipe), and teleporter links `^U_PORTALLINE` (Teleport Cable). All three store their run as a vector instead of an orientation, which is what makes the base's graph readable; see the save notes. `[verified: sample]` `[game-data: the three names by ID from AssistantNMS, 2026-09-15]`
 - Prefab rooms (Cylindrical, Cuboid, Bio-Dome) do not include solar panels; an earlier belief that they did came from mislabelling `^U_GENERATOR_S`. `[verified: as above]`
 - `^U_PARAGON` sits at a corvette's origin with 1,000,000 in its value and is not a buildable part. `[open]`
 

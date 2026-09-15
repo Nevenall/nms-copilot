@@ -331,8 +331,9 @@ impl Alert {
         match &self.kind {
             AlertKind::CropsReady { crop, count } => format!("{}: {count} {crop} ready", self.base),
             AlertKind::DepotsFull { network, capacity } => format!(
-                "{}: depots full on extraction network {network} ({} units)",
+                "{}: depots full on extraction network {} ({} units)",
                 self.base,
+                nms_core::pipes::label(*network),
                 crate::display::thousands(*capacity)
             ),
             AlertKind::FleetWaiting {
@@ -447,7 +448,21 @@ mod tests {
             object_id,
             timestamp: SNAPSHOT,
             user_data: hi << 32,
+            ..Default::default()
         }
+    }
+
+    /// A machine standing at `position`. Machines within two units of each other chain into one network.
+    fn raw_at(object_id: &str, hi: u64, position: [f32; 3]) -> RawBaseObject<'_> {
+        RawBaseObject {
+            position,
+            ..raw(object_id, hi)
+        }
+    }
+
+    /// The nth machine of a touching row laid along x.
+    fn in_a_row(object_id: &str, hi: u64, nth: usize) -> RawBaseObject<'_> {
+        raw_at(object_id, hi, [nth as f32 * 1.5, 0.0, 0.0])
     }
 
     fn base(name: &str, objects: BaseObjects) -> PlayerBase {
@@ -468,9 +483,10 @@ mod tests {
         raws.extend(vec![raw("^RADIOPLANT", 3872); 16]);
         raws.extend(vec![raw("^BARRENPLANT", 3927); 13]);
         raws.extend(vec![raw("^BARRENPLANT", 30_000); 3]);
-        raws.extend(vec![raw("^U_GASEXTRACTOR", 154_712); 3]);
-        raws.extend(vec![raw("^U_SILO_S", 154_712); 4]);
-        raws.extend(vec![raw("^U_SILO_S", 1_440_000); 1]);
+        // Three extractors and four depots in one touching row, then a full depot standing well clear of them.
+        raws.extend((0..3).map(|n| in_a_row("^U_GASEXTRACTOR", 154_712, n)));
+        raws.extend((3..7).map(|n| in_a_row("^U_SILO_S", 154_712, n)));
+        raws.push(raw_at("^U_SILO_S", 1_440_000, [40.0, 0.0, 0.0]));
         raws.push(raw("^U_BATTERY_S", 45_000));
         raws.extend(vec![raw("^U_GENERATOR_S", 0); 4]);
         raws.extend(vec![raw("^U_POWERLINE", 0); 30]);
@@ -633,7 +649,7 @@ mod tests {
         assert_eq!(alerts[0].key(), "crops:farm:Frost Crystal");
         assert_eq!(
             alerts[1].text(),
-            "Farm: depots full on extraction network 2 (1,000 units)"
+            "Farm: depots full on extraction network B (1,000 units)"
         );
         assert_eq!(alerts[1].key(), "full:farm:2");
         let summary = AlertSummary::from_alerts(&alerts);

@@ -38,6 +38,9 @@ pub struct Config {
 
     /// Save backup settings.
     pub backup: BackupConfig,
+
+    /// Dashboard settings.
+    pub dashboard: DashboardConfig,
 }
 
 /// Save file location and format.
@@ -213,6 +216,41 @@ impl Default for BackupConfig {
             dir: None,
             keep: 20,
         }
+    }
+}
+
+/// Dashboard settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct DashboardConfig {
+    /// Open into the dashboard (default: true); false starts at the prompt.
+    pub start: bool,
+
+    /// How often alerts are re-checked against the clock, in seconds (default: 60).
+    pub tick_secs: u64,
+
+    /// Ring the terminal bell when a new alert appears (default: true).
+    pub bell: bool,
+
+    /// Lines kept in the log panel (default: 20).
+    pub log_lines: usize,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            start: true,
+            tick_secs: 60,
+            bell: true,
+            log_lines: 20,
+        }
+    }
+}
+
+impl DashboardConfig {
+    /// The alert re-check interval, never shorter than a second.
+    pub fn tick(&self) -> Duration {
+        Duration::from_secs(self.tick_secs.max(1))
     }
 }
 
@@ -775,5 +813,34 @@ mod tests {
         assert!(!config.display.show_system_banner);
         // show_banner defaults to true independently
         assert!(config.display.show_banner);
+    }
+
+    #[test]
+    fn test_dashboard_config_defaults() {
+        let config = Config::default();
+        assert!(config.dashboard.start);
+        assert_eq!(config.dashboard.tick(), Duration::from_secs(60));
+        assert!(config.dashboard.bell);
+        assert_eq!(config.dashboard.log_lines, 20);
+    }
+
+    #[test]
+    fn test_dashboard_config_from_toml() {
+        let toml = r#"
+            [dashboard]
+            start = false
+            tick_secs = 0
+            bell = false
+            log_lines = 5
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.dashboard.start);
+        assert_eq!(
+            config.dashboard.tick(),
+            Duration::from_secs(1),
+            "never shorter than a second"
+        );
+        assert!(!config.dashboard.bell);
+        assert_eq!(config.dashboard.log_lines, 5);
     }
 }

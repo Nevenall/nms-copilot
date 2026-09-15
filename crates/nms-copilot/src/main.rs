@@ -1,12 +1,12 @@
 //! NMS Copilot -- interactive galactic REPL for No Man's Sky.
 //!
 //! Modes:
-//! - **Normal** (default): REPL + MCP HTTP server sharing one `GalaxyModel`
+//! - **Normal** (default): dashboard and REPL prompt + MCP HTTP server sharing one `GalaxyModel`
 //! - **Headless** (`--headless`): MCP server only, no REPL
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::io::{Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,13 +19,14 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 
 use nms_copilot::banner;
+use nms_copilot::commands::Action;
 use nms_copilot::completer::{CopilotCompleter, ModelCompletions};
 use nms_copilot::config::Config;
 use nms_copilot::mcp;
 use nms_copilot::prompt::{CopilotPrompt, PromptState};
 use nms_copilot::session::{SessionState, unix_now};
-use nms_copilot::watch::drain_watch_events;
-use nms_copilot::{commands, dispatch, paths};
+use nms_copilot::watch::WatchContext;
+use nms_copilot::{commands, dashboard, dispatch, paths};
 use nms_graph::GalaxyModel;
 use nms_watch::{WatchConfig, WatchHandle, start_watching};
 
@@ -53,6 +54,10 @@ struct Cli {
     /// Run the interactive setup questionnaire before loading the save file.
     #[arg(long)]
     setup: bool,
+
+    /// Start at the prompt instead of the dashboard; `dash` opens the dashboard from there.
+    #[arg(long)]
+    prompt: bool,
 
     /// Use MCP HTTP transport, optionally bound to ADDR.
     ///
@@ -220,6 +225,8 @@ fn main() {
         config.backup_enabled(),
         save_path.as_deref(),
     );
+    session.watching = watch_handle.is_some();
+    session.set_log_capacity(config.dashboard.log_lines);
     if session.backup_enabled && watch_handle.is_some() {
         println!(
             "Automatic snapshots on: {}\n",
@@ -231,41 +238,123 @@ fn main() {
     println!("{}\n", session.alert_line());
     let mut prompt = CopilotPrompt::new(PromptState::from_session(&session));
 
-    loop {
-        // Drain any pending watch events before showing prompt
-        if let Some(ref handle) = watch_handle {
-            let mut guard = model.blocking_write();
-            drain_watch_events(
-                &handle.receiver,
-                &mut guard,
-                &mut session,
-                cache_for_watcher,
-                save_version,
-            );
-        }
+    let watch = WatchContext {
+        receiver: watch_handle.as_ref().map(|h| &h.receiver),
+        cache_path: cache_for_watcher,
+        save_version,
+    };
+    let color = nms_query::theme::should_use_colors(config.display.color);
+    let dashboard_options = dashboard::Options {
+        tick: config.dashboard.tick(),
+        bell: config.dashboard.bell,
+        color,
+    };
+    // With the dashboard as the home screen, an empty line at the prompt goes back to it. It needs a terminal on both ends, so a piped session stays at the prompt.
+    let interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
+    let dashboard_home = config.dashboard.start && !cli.prompt && interactive;
+    let mut mode = if dashboard_home {
+        Mode::Dashboard
+    } else {
+        Mode::Prompt
+    };
 
-        // Re-check base alerts against the clock and the (possibly refreshed) model.
-        for note in session.refresh_alerts(&model.blocking_read(), unix_now()) {
+    loop {
+        mode = match mode {
+            Mode::Dashboard => {
+                match dashboard::run(&model, &mut session, &watch, &dashboard_options) {
+                    Ok(dashboard::Next::Prompt) => Mode::Prompt,
+                    Ok(dashboard::Next::Quit) => break,
+                    Err(e) => {
+                        eprintln!("Dashboard error: {e}");
+                        Mode::Prompt
+                    }
+                }
+            }
+            Mode::Prompt => match run_prompt(
+                &mut editor,
+                &mut prompt,
+                &model,
+                &mut session,
+                &watch,
+                dashboard_home,
+                color,
+            ) {
+                PromptExit::Dashboard => Mode::Dashboard,
+                PromptExit::Quit => break,
+            },
+        };
+    }
+
+    println!("Goodbye!");
+}
+
+/// The reminder printed on dropping to the prompt, saying how to get back.
+fn prompt_hint(dashboard_home: bool, color: bool) -> String {
+    let text = if dashboard_home {
+        "  An empty line or \"dash\" returns to the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
+    } else {
+        "  \"dash\" opens the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
+    };
+    if color {
+        nms_query::theme::Theme::default_dark().muted.paint(text)
+    } else {
+        text.to_string()
+    }
+}
+
+/// Which screen owns the terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Dashboard,
+    Prompt,
+}
+
+/// Why the prompt loop returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptExit {
+    Dashboard,
+    Quit,
+}
+
+/// The reedline loop: sync the watcher before each prompt, run commands, and return when the player asks for the dashboard or to leave.
+///
+/// An empty line returns to the dashboard when it is the home screen (`dashboard_home`); `dash` always does. The prompt draws itself under the dashboard, so its output scrolls the dashboard up until the player goes back to it.
+fn run_prompt(
+    editor: &mut Reedline,
+    prompt: &mut CopilotPrompt,
+    model: &Arc<RwLock<GalaxyModel>>,
+    session: &mut SessionState,
+    watch: &WatchContext<'_>,
+    dashboard_home: bool,
+    color: bool,
+) -> PromptExit {
+    println!("{}", prompt_hint(dashboard_home, color));
+    loop {
+        for note in watch.sync_now(model, session, unix_now()).notes {
             println!("  {note}");
         }
 
-        prompt.update(PromptState::from_session(&session));
-        match editor.read_line(&prompt) {
-            Ok(Signal::Success(line)) => match commands::parse_line(&line) {
-                Ok(Some(action)) => {
-                    if matches!(action, commands::Action::Exit | commands::Action::Quit) {
-                        break;
+        prompt.update(PromptState::from_session(session));
+        match editor.read_line(prompt) {
+            Ok(Signal::Success(line)) => {
+                if line.trim().is_empty() {
+                    if dashboard_home {
+                        return PromptExit::Dashboard;
                     }
-                    if matches!(action, commands::Action::Map) {
+                    continue;
+                }
+                match commands::parse_line(&line) {
+                    Ok(Some(Action::Exit | Action::Quit)) => return PromptExit::Quit,
+                    Ok(Some(Action::Dash)) => return PromptExit::Dashboard,
+                    Ok(Some(Action::Map)) => {
                         let guard = model.blocking_read();
-                        if let Err(e) = nms_copilot::map::run_map(&guard, &session) {
+                        if let Err(e) = nms_copilot::map::run_map(&guard, session) {
                             eprintln!("Map error: {e}");
                         }
-                        continue;
                     }
-                    {
+                    Ok(Some(action)) => {
                         let guard = model.blocking_read();
-                        match dispatch::dispatch(&action, &guard, &mut session) {
+                        match dispatch::dispatch(&action, &guard, session) {
                             Ok(output) => {
                                 if !output.is_empty() {
                                     print!("{output}");
@@ -274,35 +363,19 @@ fn main() {
                             Err(e) => eprintln!("Error: {e}"),
                         }
                     }
-
-                    // Also drain after command execution
-                    if let Some(ref handle) = watch_handle {
-                        let mut guard = model.blocking_write();
-                        drain_watch_events(
-                            &handle.receiver,
-                            &mut guard,
-                            &mut session,
-                            cache_for_watcher,
-                            save_version,
-                        );
-                    }
+                    Ok(None) => {}
+                    Err(e) => eprintln!("{e}"),
                 }
-                Ok(None) => {}
-                Err(e) => eprintln!("{e}"),
-            },
-            Ok(Signal::CtrlD | Signal::CtrlC) => {
-                break;
             }
+            Ok(Signal::CtrlD | Signal::CtrlC) => return PromptExit::Quit,
             // `Signal` is non-exhaustive as of reedline 0.49; other signals need no action.
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Input error: {e}");
-                break;
+                return PromptExit::Quit;
             }
         }
     }
-
-    println!("Goodbye!");
 }
 
 fn build_editor(completer: Box<CopilotCompleter>) -> Reedline {
@@ -868,6 +941,29 @@ mod tests {
     fn test_setup_flag_parses() {
         let cli = Cli::try_parse_from(["nms-copilot", "--setup"]).unwrap();
         assert!(cli.setup);
+    }
+
+    #[test]
+    fn test_prompt_hint_says_how_to_get_back() {
+        let home = prompt_hint(true, false);
+        assert!(
+            home.contains("empty line or \"dash\" returns to the dashboard"),
+            "{home}"
+        );
+        let away = prompt_hint(false, false);
+        assert!(away.contains("\"dash\" opens the dashboard"), "{away}");
+        assert!(!away.contains("empty line"), "{away}");
+        assert!(
+            prompt_hint(true, true).contains("\x1b["),
+            "coloured when colour is on"
+        );
+    }
+
+    #[test]
+    fn test_prompt_flag_parses() {
+        let cli = Cli::try_parse_from(["nms-copilot", "--prompt"]).unwrap();
+        assert!(cli.prompt);
+        assert!(!Cli::try_parse_from(["nms-copilot"]).unwrap().prompt);
     }
 
     #[test]

@@ -4,6 +4,7 @@ pub mod banner;
 pub mod commands;
 pub mod completer;
 pub mod config;
+pub mod dashboard;
 pub mod dispatch;
 pub mod map;
 pub mod mcp;
