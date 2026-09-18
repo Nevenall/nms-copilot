@@ -75,6 +75,27 @@ pub enum Action {
         target: Option<String>,
     },
 
+    /// Do I have an item, how much, and where? Matches item names and IDs.
+    Have {
+        /// Name or ID to look for (substring, case-insensitive), e.g. gold or ASTEROID2.
+        #[arg(required = true, num_args = 1..)]
+        pattern: Vec<String>,
+
+        /// Only items of this type: substance, product, or technology.
+        #[arg(long = "type")]
+        kind: Option<String>,
+    },
+
+    /// Every container and how full it is, or one container's contents.
+    Inventory {
+        /// A container to show in full ("storage 3", exosuit, freighter, "ship 1") or a word its label contains (ship, storage).
+        container: Vec<String>,
+
+        /// Order by free slots, most first, and leave out full containers.
+        #[arg(long)]
+        free: bool,
+    },
+
     /// Display aggregate galaxy statistics.
     Stats {
         /// Show biome distribution table.
@@ -258,6 +279,25 @@ pub enum ListTarget {
     /// List terrain generation types (GcBiomeSubType).
     #[command(name = "terrain-types")]
     TerrainTypes,
+    /// List every item you hold with its total across all containers.
+    Items {
+        /// Only items of this type: substance, product, or technology.
+        #[arg(long = "type")]
+        kind: Option<String>,
+
+        /// Only items with at least this many.
+        #[arg(long, default_value = "0")]
+        min: u32,
+
+        /// Only items whose name or ID contains this.
+        pattern: Option<String>,
+    },
+    /// List owned ships with type, class, slots, and bonuses.
+    Ships,
+    /// List owned exocraft and where each is parked.
+    Exocraft,
+    /// List owned multi-tools with class, slots, and bonuses.
+    Multitools,
 }
 
 #[derive(Subcommand, Debug)]
@@ -679,6 +719,60 @@ mod tests {
         assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "frigates"));
         let action = parse_line("fleet 2").unwrap().unwrap();
         assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "2"));
+    }
+
+    #[test]
+    fn test_parse_have_and_inventory() {
+        let action = parse_line("have gold").unwrap().unwrap();
+        assert!(
+            matches!(action, Action::Have { ref pattern, kind: None } if pattern == &["gold".to_string()])
+        );
+        let action = parse_line("have chromatic metal --type substance")
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(action, Action::Have { ref pattern, kind: Some(ref k) } if pattern.len() == 2 && k == "substance")
+        );
+        assert!(parse_line("have").is_err(), "a pattern is required");
+        let action = parse_line("inventory").unwrap().unwrap();
+        assert!(
+            matches!(action, Action::Inventory { ref container, free: false } if container.is_empty())
+        );
+        let action = parse_line("inventory storage 3 --free").unwrap().unwrap();
+        assert!(
+            matches!(action, Action::Inventory { ref container, free: true } if container == &["storage".to_string(), "3".to_string()])
+        );
+        let action = parse_line("list items --min 100 --type product")
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            action,
+            Action::List {
+                target: ListTarget::Items {
+                    min: 100,
+                    kind: Some(_),
+                    pattern: None
+                }
+            }
+        ));
+        assert!(matches!(
+            parse_line("list ships").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Ships
+            }
+        ));
+        assert!(matches!(
+            parse_line("list exocraft").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Exocraft
+            }
+        ));
+        assert!(matches!(
+            parse_line("list multitools").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Multitools
+            }
+        ));
     }
 
     #[test]

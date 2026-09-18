@@ -297,7 +297,7 @@ async fn apply_deltas_loop(
         while let Ok(event) = receiver.recv() {
             match event {
                 WatchEvent::Delta(delta) => {
-                    if tx.send(delta).is_err() {
+                    if tx.send(*delta).is_err() {
                         break;
                     }
                 }

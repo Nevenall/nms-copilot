@@ -4,6 +4,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use nms_core::address::GalacticAddress;
 use nms_core::fleet::Fleet;
+use nms_core::holdings::Holdings;
 use nms_core::player::{PlayerBase, PlayerState};
 use nms_core::system::Planet;
 
@@ -24,6 +25,9 @@ pub struct CacheData {
 
     /// The fleet at time of caching.
     pub fleet: Option<Fleet>,
+
+    /// The holdings at time of caching.
+    pub holdings: Option<Holdings>,
 
     /// Save file version that produced this cache.
     pub save_version: u32,

@@ -9,11 +9,16 @@ use nms_graph::query::BiomeFilter;
 use nms_graph::route::RoutingAlgorithm;
 use nms_query::base::{BaseQuery, execute_base};
 use nms_query::display::{
-    format_base_detail, format_base_overview, format_find_results, format_fleet, format_route,
+    format_base_detail, format_base_overview, format_exocraft, format_find_results, format_fleet,
+    format_have, format_inventory, format_items, format_multitools, format_route, format_ships,
     format_show_result, format_stats, hex_to_emoji,
 };
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
 use nms_query::fleet::{FleetTarget, execute_fleet};
+use nms_query::inventory::{
+    HaveQuery, InventoryQuery, ListItemsQuery, execute_exocraft, execute_have, execute_inventory,
+    execute_list_items, holdings,
+};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
 use nms_query::show::{ShowQuery, execute_show};
 use nms_query::stats::{StatsQuery, execute_stats};
@@ -77,6 +82,8 @@ pub fn dispatch(
         Action::Show { target } => dispatch_show(model, target),
         Action::Base { name, width } => dispatch_base(model, name.as_deref(), *width),
         Action::Fleet { target } => dispatch_fleet(model, target.as_deref()),
+        Action::Have { pattern, kind } => dispatch_have(model, pattern, kind.as_deref()),
+        Action::Inventory { container, free } => dispatch_inventory(model, container, *free),
 
         Action::Stats {
             biomes,
@@ -423,7 +430,72 @@ fn dispatch_list(model: &GalaxyModel, target: &ListTarget) -> Result<String, Str
             }
             Ok(out)
         }
+
+        ListTarget::Items { kind, min, pattern } => {
+            let query = ListItemsQuery {
+                kind: parse_kind(kind.as_deref())?,
+                min_amount: *min,
+                pattern: pattern.clone(),
+            };
+            let items = execute_list_items(model, &query).map_err(|e| e.to_string())?;
+            Ok(format_items(&items, &Theme::default_dark()))
+        }
+        ListTarget::Ships => Ok(format_ships(
+            &holdings(model).map_err(|e| e.to_string())?.ships,
+            &Theme::default_dark(),
+        )),
+        ListTarget::Exocraft => Ok(format_exocraft(
+            &execute_exocraft(model).map_err(|e| e.to_string())?,
+            &Theme::default_dark(),
+        )),
+        ListTarget::Multitools => Ok(format_multitools(
+            &holdings(model).map_err(|e| e.to_string())?.multitools,
+            &Theme::default_dark(),
+        )),
     }
+}
+
+/// Parse the `--type` word of `have` and `list items`.
+fn parse_kind(kind: Option<&str>) -> Result<Option<nms_core::ItemKind>, String> {
+    match kind {
+        None => Ok(None),
+        Some(word) => nms_core::ItemKind::parse(word).map(Some).ok_or_else(|| {
+            format!("unknown item type \"{word}\": use substance, product, or technology")
+        }),
+    }
+}
+
+/// `have <pattern> [--type]`: every matching item, its total, and where each stack sits.
+fn dispatch_have(
+    model: &GalaxyModel,
+    pattern: &[String],
+    kind: Option<&str>,
+) -> Result<String, String> {
+    let pattern = pattern.join(" ");
+    let query = HaveQuery {
+        pattern: pattern.clone(),
+        kind: parse_kind(kind)?,
+    };
+    let results = execute_have(model, &query).map_err(|e| e.to_string())?;
+    Ok(format_have(&results, &pattern, &Theme::default_dark()))
+}
+
+/// `inventory [container] [--free]`: the container overview or one container's contents.
+fn dispatch_inventory(
+    model: &GalaxyModel,
+    container: &[String],
+    free: bool,
+) -> Result<String, String> {
+    let container = (!container.is_empty()).then(|| container.join(" "));
+    let result = execute_inventory(
+        model,
+        &InventoryQuery {
+            container,
+            free_only: free,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(format_inventory(&result, &Theme::default_dark()))
 }
 
 fn dispatch_show(model: &GalaxyModel, target: &ShowTarget) -> Result<String, String> {
@@ -654,6 +726,7 @@ fn base_type_label(bt: &BaseType) -> &'static str {
         BaseType::HomePlanetBase => "home",
         BaseType::FreighterBase => "freighter",
         BaseType::ExternalPlanetBase => "external",
+        BaseType::PlayerShipBase => "ship",
         _ => "unknown",
     }
 }
@@ -708,13 +781,15 @@ NMS Copilot -- Interactive Galaxy Explorer
 
 Commands:
   find       Search planets by biome, distance, name
-  list       List galaxies, biomes, glyphs, bases, systems, terrain-types
+  list       List galaxies, biomes, glyphs, bases, systems, terrain-types, items, ships, exocraft, multitools
   map        Open interactive galaxy map
   dash       Return to the dashboard (an empty line does the same)
   route      Plan a route through discovered systems
   show       Show system or base details
   base       Show crops, extraction networks, and power at your bases
   fleet      Show frigate expeditions, the Navigator's offers, and the fleet
+  have       Do I have an item, how much, and where? (have gold)
+  inventory  Every container and how full it is; inventory \"storage 3\" for its contents
   backup     Snapshot the save now; backup on | off | list
   stats      Display aggregate galaxy statistics
   convert    Convert between coordinate formats
@@ -739,6 +814,12 @@ Examples:
   fleet
   fleet 1
   fleet frigates
+  have gold
+  have gas --type substance
+  inventory --free
+  inventory \"storage 3\"
+  list items --min 1000
+  list ships
   backup --label before-call
   backup on
   stats --biomes

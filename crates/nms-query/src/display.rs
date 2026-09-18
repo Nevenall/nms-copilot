@@ -7,6 +7,7 @@
 use crate::base::{Alert, AlertKind, AlertSummary, BaseStatus, CropRow, PowerSummary};
 use crate::find::FindResult;
 use crate::fleet::{ExpeditionRow, FleetStatus, FleetTarget};
+use crate::inventory::{ExocraftRow, HaveResult, InventoryResult, ItemTotal};
 use crate::layout::side_by_side;
 use crate::route::RouteResult;
 use crate::show::{ShowBaseResult, ShowResult, ShowSystemResult};
@@ -1127,6 +1128,259 @@ pub fn format_frigates(status: &FleetStatus, theme: &Theme) -> String {
     }
     builder.push_record([""; 14]);
     build_table(builder, &["FRIGATES"], &table_theme, "Frigates")
+}
+
+// ── Holdings ────────────────────────────────────────────────────
+
+/// Where a container can be opened, as one cell.
+fn access_cell(access: &[String]) -> String {
+    if access.is_empty() {
+        "-".to_string()
+    } else {
+        access.join(", ")
+    }
+}
+
+/// `have`: one block per matched item, the total in the title and one row per stack.
+pub fn format_have(results: &[HaveResult], pattern: &str, theme: &Theme) -> String {
+    if results.is_empty() {
+        return format!("  Nothing matching \"{pattern}\" in any container.\n");
+    }
+    let table_theme = table_theme_for(theme);
+    let mut blocks = Vec::new();
+    for result in results {
+        let mut builder = Builder::default();
+        builder.push_record(["Location", "Amount", "Stack", "Reachable from"]);
+        for loc in &result.locations {
+            builder.push_record([
+                loc.label.clone(),
+                thousands(loc.amount),
+                thousands(loc.max),
+                access_cell(&loc.access),
+            ]);
+        }
+        builder.push_record(["Total", &thousands(result.total), "", ""]);
+        let title = format!("{} ({})", result.name, result.id.display_id());
+        blocks.push(build_table(
+            builder,
+            &["HOLDINGS", "", "", &title],
+            &table_theme,
+            "",
+        ));
+    }
+    blocks.join("\n")
+}
+
+/// `inventory`: one row per container, or the stacks of the selected containers.
+pub fn format_inventory(result: &InventoryResult, theme: &Theme) -> String {
+    let table_theme = table_theme_for(theme);
+    match result {
+        InventoryResult::Overview(containers) => {
+            if containers.is_empty() {
+                return "  No containers.\n".to_string();
+            }
+            let mut builder = Builder::default();
+            builder.push_record(["Container", "Class", "Used", "Free", "Reachable from"]);
+            for c in containers {
+                builder.push_record([
+                    c.label(),
+                    c.class_label().to_string(),
+                    c.used_label(),
+                    c.free_label(),
+                    access_cell(&c.access),
+                ]);
+            }
+            builder.push_record([""; 5]);
+            build_table(builder, &["INVENTORY"], &table_theme, "Containers")
+        }
+        InventoryResult::Contents(containers) => {
+            let mut blocks = Vec::new();
+            for c in containers {
+                let mut builder = Builder::default();
+                builder.push_record(["Slot", "Item", "Amount", "Stack", "Type"]);
+                let mut stacks: Vec<_> = c.stacks.iter().collect();
+                stacks.sort_by_key(|s| (s.slot.1, s.slot.0));
+                for stack in stacks {
+                    builder.push_record([
+                        format!("{},{}", stack.slot.0 + 1, stack.slot.1 + 1),
+                        stack.name(),
+                        thousands(stack.amount),
+                        thousands(stack.max),
+                        stack
+                            .kind
+                            .map(|k| k.display_name())
+                            .unwrap_or("?")
+                            .to_string(),
+                    ]);
+                }
+                let summary = format!(
+                    "{} slots used, class {}, {}",
+                    c.used_label(),
+                    c.class_label(),
+                    access_cell(&c.access)
+                );
+                builder.push_record([
+                    summary,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]);
+                blocks.push(build_table(
+                    builder,
+                    &["INVENTORY", &c.label()],
+                    &table_theme,
+                    "",
+                ));
+            }
+            blocks.join("\n")
+        }
+    }
+}
+
+/// `list items`: every item with its total, largest first.
+pub fn format_items(items: &[ItemTotal], theme: &Theme) -> String {
+    if items.is_empty() {
+        return "  No items.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record(["Item", "ID", "Type", "Total", "Stacks", "Containers"]);
+    for item in items {
+        builder.push_record([
+            item.name.clone(),
+            item.id.display_id(),
+            item.kind
+                .map(|k| k.display_name())
+                .unwrap_or("?")
+                .to_string(),
+            thousands(item.total),
+            item.stacks.to_string(),
+            item.containers.to_string(),
+        ]);
+    }
+    builder.push_record([""; 6]);
+    build_table(builder, &["ITEMS"], &table_theme, "Items")
+}
+
+/// `list ships`: every owned ship with its class, slots, and bonuses; the primary marked.
+pub fn format_ships(ships: &[nms_core::ShipSummary], theme: &Theme) -> String {
+    if ships.is_empty() {
+        return "  No ships.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record([
+        "#",
+        "Ship",
+        "Type",
+        "Class",
+        "Slots",
+        "Cargo",
+        "Tech",
+        "Installed",
+        "Dmg",
+        "Shield",
+        "Hyper",
+        "Agility",
+        "Where",
+    ]);
+    for ship in ships {
+        let name = if ship.primary {
+            format!("{} *", ship.label())
+        } else {
+            ship.label()
+        };
+        builder.push_record([
+            (ship.index + 1).to_string(),
+            name,
+            ship.type_label().to_string(),
+            ship.class_label().to_string(),
+            ship.general_slots.to_string(),
+            ship.cargo_slots.to_string(),
+            ship.tech_slots.to_string(),
+            ship.tech_installed.to_string(),
+            format!("{:.0}%", ship.damage),
+            format!("{:.0}%", ship.shield),
+            format!("{:.0}%", ship.hyperdrive),
+            format!("{:.0}%", ship.agility),
+            ship.location().to_string(),
+        ]);
+    }
+    builder.push_record([""; 13]);
+    let mut out = build_table(builder, &["SHIPS"], &table_theme, "Ships");
+    out.push_str("  * primary ship\n");
+    out
+}
+
+/// `list exocraft`: every exocraft and where it is parked.
+pub fn format_exocraft(rows: &[ExocraftRow], theme: &Theme) -> String {
+    if rows.is_empty() {
+        return "  No exocraft.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record(["#", "Exocraft", "Slots", "Installed", "Parked at"]);
+    for row in rows {
+        let parked = match (&row.base_name, &row.system, row.vehicle.parked_at) {
+            (Some(base), _, _) => base.clone(),
+            (None, Some(system), _) => system
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("{:012X}", system.address.packed())),
+            (None, None, Some(addr)) => format!("{:012X}", addr.packed()),
+            (None, None, None) => "-".to_string(),
+        };
+        builder.push_record([
+            (row.vehicle.index + 1).to_string(),
+            row.vehicle.label(),
+            row.vehicle.slots.to_string(),
+            row.vehicle.tech_installed.to_string(),
+            parked,
+        ]);
+    }
+    builder.push_record([""; 5]);
+    build_table(builder, &["EXOCRAFT"], &table_theme, "Exocraft")
+}
+
+/// `list multitools`: every multi-tool with its class, slots, and bonuses; the equipped one marked.
+pub fn format_multitools(tools: &[nms_core::MultiToolSummary], theme: &Theme) -> String {
+    if tools.is_empty() {
+        return "  No multi-tools.\n".to_string();
+    }
+    let table_theme = table_theme_for(theme);
+    let mut builder = Builder::default();
+    builder.push_record([
+        "#",
+        "Multi-tool",
+        "Class",
+        "Slots",
+        "Installed",
+        "Damage",
+        "Mining",
+        "Scan",
+    ]);
+    for tool in tools {
+        let name = if tool.active {
+            format!("{} *", tool.label())
+        } else {
+            tool.label()
+        };
+        builder.push_record([
+            (tool.index + 1).to_string(),
+            name,
+            tool.class_label().to_string(),
+            tool.slots.to_string(),
+            tool.tech_installed.to_string(),
+            format!("{:.0}%", tool.damage),
+            format!("{:.0}%", tool.mining),
+            format!("{:.0}%", tool.scan),
+        ]);
+    }
+    builder.push_record([""; 8]);
+    let mut out = build_table(builder, &["MULTI-TOOLS"], &table_theme, "Multi-tools");
+    out.push_str("  * equipped\n");
+    out
 }
 
 /// Truncate a string to `max_len` characters, appending "..." if truncated.

@@ -405,9 +405,24 @@ fn build_model_completions(model: &GalaxyModel) -> ModelCompletions {
         .filter_map(|s| s.name.clone())
         .collect();
 
+    let mut item_names: Vec<String> = model
+        .holdings
+        .iter()
+        .flat_map(|h| h.stacks().map(|(_, s)| s.name()))
+        .collect();
+    item_names.sort();
+    item_names.dedup();
+    let container_names: Vec<String> = model
+        .holdings
+        .iter()
+        .flat_map(|h| h.containers.iter().map(|c| c.label()))
+        .collect();
+
     ModelCompletions {
         base_names,
         system_names,
+        item_names,
+        container_names,
     }
 }
 

@@ -260,6 +260,87 @@ fn test_nms_info_nonexistent_save_fails() {
 }
 
 #[test]
+fn test_nms_have_gold_reports_total_and_locations() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["have", "gold", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Gold (ASTEROID2)"))
+        .stdout(predicate::str::contains("11,297"))
+        .stdout(predicate::str::contains("Storage 1"))
+        .stdout(predicate::str::contains(
+            "Lush Haven, Frost Outpost, Home Freighter",
+        ));
+}
+
+#[test]
+fn test_nms_have_unknown_item_says_so() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["have", "unobtainium", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing matching"));
+}
+
+#[test]
+fn test_nms_inventory_overview_and_free() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["inventory", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Exosuit"))
+        .stdout(predicate::str::contains("4 / 93"))
+        .stdout(predicate::str::contains("Corvette parts"));
+    cargo_bin_cmd!("nms")
+        .args(["inventory", "--free", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Corvette parts"));
+    cargo_bin_cmd!("nms")
+        .args([
+            "inventory",
+            "storage",
+            "2",
+            "--save",
+            fixture.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Sulphurine"));
+}
+
+#[test]
+fn test_nms_list_items_ships_exocraft_multitools() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "items"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Gold"))
+        .stdout(predicate::str::contains("'Apple' Roll"))
+        .stdout(predicate::str::contains("Chromatic Metal"));
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "ships"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Starbird *"))
+        .stdout(predicate::str::contains("Fighter"));
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "exocraft"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Lush Haven"));
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "multitools"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Multi-tool 1 *"));
+}
+
+#[test]
 fn test_nms_find_with_fixture_returns_results() {
     let fixture = fixture_path("multi_system_save.json");
     cargo_bin_cmd!("nms")

@@ -7,8 +7,12 @@ use nms_core::biome::{ALL_BIOME_SUBTYPES, ALL_BIOMES};
 use nms_core::galaxy::{Galaxy, GalaxyType};
 use nms_core::glyph::GLYPH_TABLE;
 use nms_graph::GalaxyModel;
-use nms_query::display::hex_to_emoji;
+use nms_query::display::{
+    format_exocraft, format_items, format_multitools, format_ships, hex_to_emoji,
+};
+use nms_query::inventory::{ListItemsQuery, execute_exocraft, execute_list_items, holdings};
 use nms_query::table::{Builder, build_table, nms_theme};
+use nms_query::theme::{Theme, should_use_colors};
 
 use crate::ListTargetCmd;
 
@@ -24,7 +28,53 @@ pub fn run(
         ListTargetCmd::TerrainTypes => list_terrain_types(),
         ListTargetCmd::Bases { limit, all } => list_bases(save, slot, limit, all),
         ListTargetCmd::Systems { limit, all } => list_systems(save, slot, limit, all),
+        ListTargetCmd::Items { kind, min, pattern } => list_items(save, slot, kind, min, pattern),
+        ListTargetCmd::Ships => list_owned(save, slot, |model, theme| {
+            Ok(format_ships(&holdings(model)?.ships, theme))
+        }),
+        ListTargetCmd::Exocraft => list_owned(save, slot, |model, theme| {
+            Ok(format_exocraft(&execute_exocraft(model)?, theme))
+        }),
+        ListTargetCmd::Multitools => list_owned(save, slot, |model, theme| {
+            Ok(format_multitools(&holdings(model)?.multitools, theme))
+        }),
     }
+}
+
+fn display_theme() -> Theme {
+    if should_use_colors(true) {
+        Theme::default_dark()
+    } else {
+        Theme::none()
+    }
+}
+
+fn list_items(
+    save: Option<PathBuf>,
+    slot: Option<u8>,
+    kind: Option<String>,
+    min: u32,
+    pattern: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let query = ListItemsQuery {
+        kind: crate::inventory::parse_kind(kind)?,
+        min_amount: min,
+        pattern,
+    };
+    let model = load_model(save, slot)?;
+    let items = execute_list_items(&model, &query)?;
+    print!("{}", format_items(&items, &display_theme()));
+    Ok(())
+}
+
+fn list_owned(
+    save: Option<PathBuf>,
+    slot: Option<u8>,
+    render: impl Fn(&GalaxyModel, &Theme) -> Result<String, nms_graph::GraphError>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let model = load_model(save, slot)?;
+    print!("{}", render(&model, &display_theme())?);
+    Ok(())
 }
 
 fn load_model(
@@ -263,6 +313,7 @@ fn base_type_label(bt: &BaseType) -> &'static str {
         BaseType::HomePlanetBase => "home",
         BaseType::FreighterBase => "freighter",
         BaseType::ExternalPlanetBase => "external",
+        BaseType::PlayerShipBase => "ship",
         _ => "unknown",
     }
 }

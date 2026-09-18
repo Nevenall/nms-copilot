@@ -61,6 +61,9 @@ pub fn compute_delta(old: &SaveSnapshot, new: &SaveSnapshot) -> SaveDelta {
     // 6. The fleet is replaced whole when anything about it changed
     let fleet = (old.fleet != new.fleet).then(|| new.fleet.clone());
 
+    // 7. So are the holdings
+    let holdings = (old.holdings != new.holdings).then(|| new.holdings.clone());
+
     SaveDelta {
         new_systems,
         new_planets,
@@ -68,6 +71,7 @@ pub fn compute_delta(old: &SaveSnapshot, new: &SaveSnapshot) -> SaveDelta {
         new_bases,
         modified_bases,
         fleet,
+        holdings,
     }
 }
 
@@ -216,6 +220,25 @@ mod tests {
         assert_eq!(delta.modified_bases.len(), 1);
         // Not a new base, so new_bases should be empty
         assert!(delta.new_bases.is_empty());
+    }
+
+    #[test]
+    fn test_delta_replaces_holdings_when_changed() {
+        let old = test_snapshot();
+        let mut new = test_snapshot();
+        assert!(compute_delta(&old, &new).holdings.is_none());
+        new.holdings.containers.push(nms_core::Container {
+            kind: nms_core::ContainerKind::Exosuit,
+            class: None,
+            width: 10,
+            height: 12,
+            unlocked_slots: 93,
+            stacks: vec![],
+            access: vec![],
+        });
+        let delta = compute_delta(&old, &new);
+        assert_eq!(delta.holdings.as_ref().map(|h| h.containers.len()), Some(1));
+        assert_eq!(delta.change_count(), 1);
     }
 
     #[test]

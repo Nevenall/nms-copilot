@@ -16,6 +16,8 @@ pub enum BaseType {
     HomePlanetBase,
     FreighterBase,
     ExternalPlanetBase,
+    /// The corvette, a ship the player builds from parts; its record is a base named `Default`.
+    PlayerShipBase,
 }
 
 impl fmt::Display for BaseType {
@@ -24,6 +26,7 @@ impl fmt::Display for BaseType {
             Self::HomePlanetBase => write!(f, "HomePlanetBase"),
             Self::FreighterBase => write!(f, "FreighterBase"),
             Self::ExternalPlanetBase => write!(f, "ExternalPlanetBase"),
+            Self::PlayerShipBase => write!(f, "PlayerShipBase"),
         }
     }
 }
@@ -48,6 +51,7 @@ impl FromStr for BaseType {
             "homeplanetbase" | "home" => Ok(Self::HomePlanetBase),
             "freighterbase" | "freighter" => Ok(Self::FreighterBase),
             "externalplanetbase" | "external" => Ok(Self::ExternalPlanetBase),
+            "playershipbase" | "ship" | "corvette" => Ok(Self::PlayerShipBase),
             _ => Err(BaseTypeParseError(s.to_string())),
         }
     }
@@ -154,6 +158,7 @@ mod tests {
             BaseType::HomePlanetBase,
             BaseType::FreighterBase,
             BaseType::ExternalPlanetBase,
+            BaseType::PlayerShipBase,
         ] {
             let s = bt.to_string();
             let parsed: BaseType = s.parse().unwrap();

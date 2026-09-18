@@ -10,6 +10,7 @@ use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
 use nms_core::delta::SaveDelta;
 use nms_core::fleet::Fleet;
+use nms_core::holdings::Holdings;
 use nms_core::player::{PlayerBase, PlayerState};
 use nms_core::system::{Planet, System};
 use nms_save::model::SaveRoot;
@@ -63,6 +64,9 @@ pub struct GalaxyModel {
 
     /// The frigate fleet and its running expeditions; `None` only for a model built without a save.
     pub fleet: Option<Fleet>,
+
+    /// Every inventory grid, ship, exocraft, and multi-tool; `None` only for a model built without a save.
+    pub holdings: Option<Holdings>,
 }
 
 impl Default for GalaxyModel {
@@ -87,6 +91,7 @@ impl GalaxyModel {
             node_map: HashMap::new(),
             player_state: None,
             fleet: None,
+            holdings: None,
         }
     }
 
@@ -142,6 +147,7 @@ impl GalaxyModel {
         // Extract player state and determine active galaxy
         let player_state = Some(save.to_core_player_state());
         let fleet = Some(save.to_core_fleet());
+        let holdings = Some(save.to_core_holdings());
         let active_galaxy = save.active_player_state().universe_address.reality_index;
 
         // Extract bases
@@ -167,6 +173,7 @@ impl GalaxyModel {
             node_map,
             player_state,
             fleet,
+            holdings,
         };
 
         model.build_edges(crate::edges::EdgeStrategy::default());
@@ -363,6 +370,11 @@ impl GalaxyModel {
         // 6. Replace the fleet when it changed
         if let Some(fleet) = &delta.fleet {
             self.fleet = Some(fleet.clone());
+        }
+
+        // 7. Replace the holdings when they changed
+        if let Some(holdings) = &delta.holdings {
+            self.holdings = Some(holdings.clone());
         }
     }
 }

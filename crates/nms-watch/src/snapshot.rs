@@ -9,6 +9,7 @@ use std::path::Path;
 
 use nms_core::address::GalacticAddress;
 use nms_core::fleet::Fleet;
+use nms_core::holdings::Holdings;
 use nms_core::player::PlayerBase;
 use nms_core::system::{Planet, System, SystemId};
 use nms_graph::extract::extract_systems;
@@ -27,6 +28,8 @@ pub struct SaveSnapshot {
     pub player_address: GalacticAddress,
     /// The fleet and its expeditions.
     pub fleet: Fleet,
+    /// Every grid, ship, exocraft, and multi-tool.
+    pub holdings: Holdings,
 }
 
 impl SaveSnapshot {
@@ -58,6 +61,7 @@ impl SaveSnapshot {
 
         let player_address = save.to_core_player_state().current_address;
         let fleet = save.to_core_fleet();
+        let holdings = save.to_core_holdings();
 
         Self {
             systems: extracted,
@@ -65,6 +69,7 @@ impl SaveSnapshot {
             bases,
             player_address,
             fleet,
+            holdings,
         }
     }
 }

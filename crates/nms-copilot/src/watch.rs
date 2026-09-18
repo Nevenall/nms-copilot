@@ -82,7 +82,7 @@ pub fn sync(
                 notes.extend(save_written(session, &file));
                 None
             }
-            WatchEvent::Delta(delta) => Some(delta),
+            WatchEvent::Delta(delta) => Some(*delta),
         })
         .collect();
 
@@ -410,7 +410,7 @@ mod tests {
             )],
             ..SaveDelta::empty()
         };
-        tx.send(WatchEvent::Delta(delta)).unwrap();
+        tx.send(WatchEvent::Delta(Box::new(delta))).unwrap();
 
         let report = sync(&model, &mut session, drain(Some(&rx)), None, 0, 1_000);
         assert_eq!(

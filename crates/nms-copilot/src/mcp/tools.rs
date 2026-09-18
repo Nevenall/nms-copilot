@@ -23,6 +23,10 @@ use nms_query::display::{
 };
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
 use nms_query::fleet::{execute_fleet, fleet_alerts};
+use nms_query::inventory::{
+    HaveQuery, InventoryQuery, InventoryResult, execute_exocraft, execute_have, execute_inventory,
+    holdings,
+};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
 use nms_query::show::{ShowQuery, ShowResult, execute_show};
 use nms_query::stats::{StatsQuery, execute_stats};
@@ -53,6 +57,9 @@ impl ToolRegistry for NmsTools {
             show_base_tool(),
             base_status_tool(),
             fleet_status_tool(),
+            have_item_tool(),
+            inventory_summary_tool(),
+            list_ships_tool(),
             convert_coordinates_tool(),
             galaxy_stats_tool(),
         ]
@@ -69,6 +76,9 @@ impl ToolRegistry for NmsTools {
             "show_base" => Some(Box::pin(handle_show_base(model, args))),
             "base_status" => Some(Box::pin(handle_base_status(model, args))),
             "fleet_status" => Some(Box::pin(handle_fleet_status(model, args))),
+            "have_item" => Some(Box::pin(handle_have_item(model, args))),
+            "inventory_summary" => Some(Box::pin(handle_inventory_summary(model, args))),
+            "list_ships" => Some(Box::pin(handle_list_ships(model, args))),
             "convert_coordinates" => Some(Box::pin(handle_convert(model, args))),
             "galaxy_stats" => Some(Box::pin(handle_galaxy_stats(model, args))),
             _ => None,
@@ -253,6 +263,55 @@ fn fleet_status_tool() -> Tool {
     Tool::new(
         "fleet_status",
         "Frigate expeditions: which are running, waiting for the player's decision, or back and awaiting debrief, with elapsed time and a rough estimate of time left; the Navigator's remaining daily offers and next refresh; free Fleet Command Rooms; and every frigate with its stats and whether it is out. Timing is computed from the current clock against the last save.",
+        schema(json!({ "type": "object", "properties": {} })),
+    )
+}
+
+fn have_item_tool() -> Tool {
+    Tool::new(
+        "have_item",
+        "Does the player have an item, how much, and where? Matches item names and internal IDs (substring, case-insensitive) across every container: exosuit, freighter, the ten storage containers, ships, exocraft, multi-tools, machine buffers, and the corvette parts store. Returns one entry per matched item with its total and one row per stack, each saying which container and where that container can be opened. Technology slots are never counted. Contents are as of the last save.",
+        schema(json!({
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Item name or ID to look for, e.g. \"gold\" or \"ASTEROID2\""
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "Only items of this type: substance, product, or technology"
+                }
+            },
+            "required": ["pattern"]
+        })),
+    )
+}
+
+fn inventory_summary_tool() -> Tool {
+    Tool::new(
+        "inventory_summary",
+        "Every container the player owns with its class, used and unlocked slots, free slots, and where it can be opened; or, given a container name, that container's contents slot by slot. Free space comes from the unlocked slots, not the grid's shape.",
+        schema(json!({
+            "type": "object",
+            "properties": {
+                "container": {
+                    "type": "string",
+                    "description": "A container to list in full (\"storage 3\", \"exosuit\", \"freighter\", \"ship 1\") or a word its label contains (\"ship\", \"storage\"). Omit for the overview."
+                },
+                "free_only": {
+                    "type": "boolean",
+                    "description": "Overview only: order by free slots, most first, and leave out full containers"
+                }
+            }
+        })),
+    )
+}
+
+fn list_ships_tool() -> Tool {
+    Tool::new(
+        "list_ships",
+        "The player's ships, exocraft, and multi-tools: type, class, unlocked slots, installed technology count, class bonuses, which ship is primary and which tool is equipped, and where each exocraft is parked.",
         schema(json!({ "type": "object", "properties": {} })),
     )
 }
@@ -883,6 +942,147 @@ async fn handle_fleet_status(
     text_result(json)
 }
 
+fn container_json(c: &nms_core::Container) -> Value {
+    json!({
+        "container": c.label(),
+        "class": c.class_label(),
+        "used": c.occupied(),
+        "unlocked": c.kind.has_capacity().then_some(c.unlocked_slots),
+        "free": (c.kind.has_capacity() && !c.kind.is_technology()).then_some(c.free()),
+        "technology_only": c.kind.is_technology(),
+        "reachable_from": c.access,
+    })
+}
+
+async fn handle_have_item(
+    model: Arc<RwLock<GalaxyModel>>,
+    args: Value,
+) -> Result<CallToolResult, ErrorData> {
+    let pattern = args
+        .get("pattern")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| tool_error("pattern is required"))?;
+    let kind = match args.get("kind").and_then(|v| v.as_str()) {
+        None => None,
+        Some(word) => Some(nms_core::ItemKind::parse(word).ok_or_else(|| {
+            tool_error(&format!(
+                "unknown item type \"{word}\": use substance, product, or technology"
+            ))
+        })?),
+    };
+    let model = model.read().await;
+    let results = execute_have(
+        &model,
+        &HaveQuery {
+            pattern: pattern.to_string(),
+            kind,
+        },
+    )
+    .map_err(|e| tool_error(&e.to_string()))?;
+    let items: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.id.display_id(),
+                "name": r.name,
+                "type": r.kind.map(|k| k.display_name()),
+                "total": r.total,
+                "stacks": r.locations.iter().map(|l| json!({
+                    "container": l.label,
+                    "amount": l.amount,
+                    "stack_max": l.max,
+                    "reachable_from": l.access,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    text_result(json!({ "pattern": pattern, "matches": items }))
+}
+
+async fn handle_inventory_summary(
+    model: Arc<RwLock<GalaxyModel>>,
+    args: Value,
+) -> Result<CallToolResult, ErrorData> {
+    let container = args
+        .get("container")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let free_only = args
+        .get("free_only")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let model = model.read().await;
+    let result = execute_inventory(
+        &model,
+        &InventoryQuery {
+            container,
+            free_only,
+        },
+    )
+    .map_err(|e| tool_error(&e.to_string()))?;
+    match result {
+        InventoryResult::Overview(containers) => text_result(json!({
+            "containers": containers.iter().map(container_json).collect::<Vec<_>>(),
+        })),
+        InventoryResult::Contents(containers) => text_result(json!({
+            "containers": containers.iter().map(|c| {
+                let mut v = container_json(c);
+                v["slots"] = c.stacks.iter().map(|s| json!({
+                    "slot": [s.slot.0 + 1, s.slot.1 + 1],
+                    "id": s.id.display_id(),
+                    "name": s.name(),
+                    "type": s.kind.map(|k| k.display_name()),
+                    "amount": s.amount,
+                    "stack_max": s.max,
+                })).collect::<Vec<_>>().into();
+                v
+            }).collect::<Vec<_>>(),
+        })),
+    }
+}
+
+async fn handle_list_ships(
+    model: Arc<RwLock<GalaxyModel>>,
+    _args: Value,
+) -> Result<CallToolResult, ErrorData> {
+    let model = model.read().await;
+    let h = holdings(&model).map_err(|e| tool_error(&e.to_string()))?;
+    let exocraft = execute_exocraft(&model).map_err(|e| tool_error(&e.to_string()))?;
+    text_result(json!({
+        "ships": h.ships.iter().map(|s| json!({
+            "index": s.index + 1,
+            "name": s.label(),
+            "type": s.type_label(),
+            "class": s.class_label(),
+            "primary": s.primary,
+            "slots": { "general": s.general_slots, "cargo": s.cargo_slots, "technology": s.tech_slots },
+            "technology_installed": s.tech_installed,
+            "bonuses": { "damage": s.damage, "shield": s.shield, "hyperdrive": s.hyperdrive, "agility": s.agility },
+            "where": s.location(),
+        })).collect::<Vec<_>>(),
+        "exocraft": exocraft.iter().map(|row| json!({
+            "index": row.vehicle.index + 1,
+            "name": row.vehicle.label(),
+            "slots": row.vehicle.slots,
+            "technology_installed": row.vehicle.tech_installed,
+            "parked_at_base": row.base_name,
+            "parked_at_system": row.system.as_ref().and_then(|s| s.name.clone()),
+            "parked_at_address": row.vehicle.parked_at.map(|a| format!("{:012X}", a.packed())),
+        })).collect::<Vec<_>>(),
+        "multitools": h.multitools.iter().map(|t| json!({
+            "index": t.index + 1,
+            "name": t.label(),
+            "class": t.class_label(),
+            "equipped": t.active,
+            "slots": t.slots,
+            "technology_installed": t.tech_installed,
+            "bonuses": { "damage": t.damage, "mining": t.mining, "scan": t.scan },
+        })).collect::<Vec<_>>(),
+    }))
+}
+
 async fn handle_convert(
     _model: Arc<RwLock<GalaxyModel>>,
     args: Value,
@@ -994,9 +1194,12 @@ mod tests {
         let tools = NmsTools::new(test_model());
         let tool_list = tools.tools();
         let names: Vec<&str> = tool_list.iter().map(|t| t.name.as_ref()).collect();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 13);
         assert!(names.contains(&"base_status"));
         assert!(names.contains(&"fleet_status"));
+        assert!(names.contains(&"have_item"));
+        assert!(names.contains(&"inventory_summary"));
+        assert!(names.contains(&"list_ships"));
         assert!(names.contains(&"search_planets"));
         assert!(names.contains(&"plan_route"));
         assert!(names.contains(&"where_am_i"));
@@ -1016,7 +1219,103 @@ mod tests {
     #[test]
     fn test_tools_tool_count() {
         let tools = NmsTools::new(test_model());
-        assert_eq!(tools.tool_count(), 10);
+        assert_eq!(tools.tool_count(), 13);
+    }
+
+    fn fixture_model() -> Arc<RwLock<GalaxyModel>> {
+        let json = include_str!("../../../../data/test/multi_system_save.json");
+        let save = nms_save::parse_save(json.as_bytes()).unwrap();
+        Arc::new(RwLock::new(GalaxyModel::from_save(&save)))
+    }
+
+    async fn call_json(tools: &NmsTools, name: &str, args: Value) -> Value {
+        let result = tools.call(name, args).unwrap().await.unwrap();
+        let text = result.content[0]
+            .as_text()
+            .map(|t| t.text.clone())
+            .expect("text content");
+        serde_json::from_str(&text).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_have_item_tool_finds_gold() {
+        let tools = NmsTools::new(fixture_model());
+        let json = call_json(&tools, "have_item", json!({"pattern": "gold"})).await;
+        let matches = json["matches"].as_array().unwrap();
+        assert_eq!(matches[0]["name"], "Gold");
+        assert_eq!(matches[0]["id"], "ASTEROID2");
+        assert_eq!(matches[0]["total"], 11_297);
+        let stacks = matches[0]["stacks"].as_array().unwrap();
+        assert_eq!(stacks.len(), 3);
+        assert_eq!(stacks[1]["container"], "Storage 1");
+        assert_eq!(stacks[1]["reachable_from"][0], "Lush Haven");
+        let none = call_json(
+            &tools,
+            "have_item",
+            json!({"pattern": "gold", "kind": "product"}),
+        )
+        .await;
+        assert!(none["matches"].as_array().unwrap().is_empty());
+        assert!(
+            tools.call("have_item", json!({})).unwrap().await.is_err(),
+            "pattern is required"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_inventory_summary_tool_overview_and_contents() {
+        let tools = NmsTools::new(fixture_model());
+        let json = call_json(&tools, "inventory_summary", json!({})).await;
+        let containers = json["containers"].as_array().unwrap();
+        let suit = containers
+            .iter()
+            .find(|c| c["container"] == "Exosuit")
+            .unwrap();
+        assert_eq!(suit["used"], 4);
+        assert_eq!(suit["unlocked"], 93);
+        assert_eq!(suit["free"], 89);
+        let machine = containers
+            .iter()
+            .find(|c| c["container"] == "Machine 1")
+            .unwrap();
+        assert!(
+            machine["unlocked"].is_null(),
+            "no capacity is recorded for a machine buffer"
+        );
+        let json = call_json(
+            &tools,
+            "inventory_summary",
+            json!({"container": "storage 1"}),
+        )
+        .await;
+        let slots = json["containers"][0]["slots"].as_array().unwrap();
+        assert_eq!(slots.len(), 4);
+        assert_eq!(slots[0]["name"], "Gold");
+        assert!(
+            tools
+                .call("inventory_summary", json!({"container": "locker"}))
+                .unwrap()
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_ships_tool_lists_everything_owned() {
+        let tools = NmsTools::new(fixture_model());
+        let json = call_json(&tools, "list_ships", json!({})).await;
+        let ships = json["ships"].as_array().unwrap();
+        assert_eq!(ships.len(), 2);
+        assert_eq!(ships[1]["name"], "Starbird");
+        assert_eq!(ships[1]["primary"], true);
+        assert_eq!(ships[1]["type"], "Exotic");
+        assert_eq!(ships[1]["slots"]["general"], 31);
+        let exocraft = json["exocraft"].as_array().unwrap();
+        assert_eq!(exocraft[0]["parked_at_base"], "Lush Haven");
+        assert!(exocraft[1]["parked_at_base"].is_null());
+        let tools_list = json["multitools"].as_array().unwrap();
+        assert_eq!(tools_list[0]["equipped"], true);
+        assert_eq!(tools_list[0]["class"], "S");
     }
 
     #[tokio::test]
@@ -1288,6 +1587,7 @@ mod tests {
             new_bases: vec![],
             modified_bases: vec![],
             fleet: None,
+            holdings: None,
         };
 
         {
@@ -1329,6 +1629,7 @@ mod tests {
                 new_bases: vec![],
                 modified_bases: vec![],
                 fleet: None,
+                holdings: None,
             });
         }
 

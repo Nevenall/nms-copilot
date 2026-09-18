@@ -8,6 +8,8 @@ pub mod discovery;
 pub mod fleet;
 pub mod galaxy;
 pub mod glyph;
+pub mod holdings;
+pub mod items;
 pub mod pipes;
 pub mod player;
 pub mod system;
@@ -22,9 +24,14 @@ pub use delta::{PlayerMoved, SaveDelta};
 pub use discovery::{Discovery, DiscoveryParseError, DiscoveryRecord};
 pub use fleet::{
     DurationClass, Event, Expedition, ExpeditionCategory, ExpeditionState, Fleet, Frigate,
-    FrigateClass, FrigateGrade,
+    FrigateClass, FrigateGrade, Grade,
 };
 pub use galaxy::{Galaxy, GalaxyType, GalaxyTypeParseError};
 pub use glyph::{Glyph, GlyphParseError};
+pub use holdings::{
+    Container, ContainerKind, Holdings, ItemId, ItemKind, ItemStack, MultiToolSummary, ShipSummary,
+    ShipType, VehicleSummary,
+};
+pub use items::ItemInfo;
 pub use player::{BaseType, BaseTypeParseError, PlayerBase, PlayerState};
 pub use system::{Planet, System, SystemId};

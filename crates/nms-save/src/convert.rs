@@ -49,6 +49,7 @@ impl PersistentPlayerBase {
         let base_type = match self.base_type.persistent_base_types.as_str() {
             "HomePlanetBase" => nms_core::BaseType::HomePlanetBase,
             "FreighterBase" => nms_core::BaseType::FreighterBase,
+            "PlayerShipBase" => nms_core::BaseType::PlayerShipBase,
             _ => nms_core::BaseType::ExternalPlanetBase,
         };
 
@@ -228,6 +229,289 @@ impl SaveRoot {
     }
 }
 
+impl crate::model::InventoryGrid {
+    /// Convert to a core container of the given kind.
+    pub fn to_core(
+        &self,
+        kind: nms_core::ContainerKind,
+        access: Vec<String>,
+    ) -> nms_core::Container {
+        nms_core::Container {
+            kind,
+            class: nms_core::Grade::from_save_name(&self.class.value),
+            width: u8::try_from(self.width).unwrap_or(u8::MAX),
+            height: u8::try_from(self.height).unwrap_or(u8::MAX),
+            unlocked_slots: u16::try_from(self.valid_slot_indices.len()).unwrap_or(u16::MAX),
+            stacks: self.slots.iter().map(|slot| slot.to_core()).collect(),
+            access,
+        }
+    }
+
+    fn unlocked(&self) -> u16 {
+        u16::try_from(self.valid_slot_indices.len()).unwrap_or(u16::MAX)
+    }
+}
+
+impl crate::model::InventorySlot {
+    /// Convert to a core stack; negative amounts, which the game has written, clamp to zero.
+    pub fn to_core(&self) -> nms_core::ItemStack {
+        nms_core::ItemStack {
+            id: nms_core::ItemId::new(self.id.clone()),
+            kind: nms_core::ItemKind::from_save_name(&self.slot_type.value),
+            amount: u32::try_from(self.amount.max(0)).unwrap_or(u32::MAX),
+            max: u32::try_from(self.max_amount.max(0)).unwrap_or(u32::MAX),
+            slot: (
+                u8::try_from(self.index.x.max(0)).unwrap_or(u8::MAX),
+                u8::try_from(self.index.y.max(0)).unwrap_or(u8::MAX),
+            ),
+        }
+    }
+}
+
+/// The name a base is known by in access lists: its name, or its type when it has none.
+fn base_label(base: &PersistentPlayerBase) -> String {
+    if !base.name.is_empty() {
+        return base.name.clone();
+    }
+    match base.base_type.persistent_base_types.as_str() {
+        "FreighterBase" => "Freighter".to_string(),
+        "PlayerShipBase" => "Corvette".to_string(),
+        _ => "Unnamed base".to_string(),
+    }
+}
+
+/// Whether a base stands on a planet, where an exocraft can be parked; the freighter and the corvette share the system's address but hold no exocraft.
+fn is_planet_base(base: &PersistentPlayerBase) -> bool {
+    !matches!(
+        base.base_type.persistent_base_types.as_str(),
+        "FreighterBase" | "PlayerShipBase"
+    )
+}
+
+/// The storage container number, 1 to 10, that a placed object opens: `^CONTAINER0` in a planet base and `^FRE_ROOM_STORE0` on the freighter both open container 1.
+fn storage_number(object_id: &str) -> Option<u8> {
+    let digit = object_id
+        .strip_prefix("^CONTAINER")
+        .or_else(|| object_id.strip_prefix("^FRE_ROOM_STORE"))?;
+    let n: u8 = digit.parse().ok()?;
+    (n < 10).then_some(n + 1)
+}
+
+impl SaveRoot {
+    /// Everything the player owns in the active context: every grid with where it can be opened, the ships, the exocraft, and the multi-tools.
+    pub fn to_core_holdings(&self) -> nms_core::Holdings {
+        use nms_core::ContainerKind as K;
+        let ps = self.active_player_state();
+        let reality_index = ps.universe_address.reality_index;
+        let bases = &ps.persistent_player_bases;
+
+        // Which bases place each storage container.
+        let mut storage_access: Vec<Vec<String>> = vec![Vec::new(); 10];
+        for base in bases {
+            let label = base_label(base);
+            for n in base
+                .objects
+                .iter()
+                .filter_map(|o| storage_number(&o.object_id))
+            {
+                let list = &mut storage_access[usize::from(n - 1)];
+                if !list.contains(&label) {
+                    list.push(label.clone());
+                }
+            }
+        }
+
+        let with_you = vec!["with you".to_string()];
+        let mut containers = vec![
+            ps.inventory.to_core(K::Exosuit, with_you.clone()),
+            ps.inventory_cargo
+                .to_core(K::ExosuitCargo, with_you.clone()),
+            ps.inventory_tech_only
+                .to_core(K::ExosuitTech, with_you.clone()),
+            ps.freighter_inventory.to_core(K::Freighter, vec![]),
+            ps.freighter_inventory_cargo
+                .to_core(K::FreighterCargo, vec![]),
+            ps.freighter_inventory_tech_only
+                .to_core(K::FreighterTech, vec![]),
+        ];
+        let chests = [
+            &ps.chest1_inventory,
+            &ps.chest2_inventory,
+            &ps.chest3_inventory,
+            &ps.chest4_inventory,
+            &ps.chest5_inventory,
+            &ps.chest6_inventory,
+            &ps.chest7_inventory,
+            &ps.chest8_inventory,
+            &ps.chest9_inventory,
+            &ps.chest10_inventory,
+        ];
+        for (i, chest) in chests.iter().enumerate() {
+            let n = u8::try_from(i + 1).unwrap_or(u8::MAX);
+            containers.push(chest.to_core(K::Storage(n), storage_access[i].clone()));
+        }
+
+        let mut ships = Vec::new();
+        for (i, ship) in ps
+            .ship_ownership
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.is_real())
+        {
+            let index = u8::try_from(i).unwrap_or(u8::MAX);
+            let primary = i == ps.primary_ship as usize;
+            let access = vec![if primary {
+                "with you".to_string()
+            } else {
+                "in the collection".to_string()
+            }];
+            containers.push(
+                ship.inventory
+                    .to_core(K::Ship { index, primary }, access.clone()),
+            );
+            containers.push(
+                ship.inventory_cargo
+                    .to_core(K::ShipCargo { index }, access.clone()),
+            );
+            containers.push(
+                ship.inventory_tech_only
+                    .to_core(K::ShipTech { index }, access),
+            );
+            let folder = ship
+                .resource
+                .filename
+                .rsplit('/')
+                .nth(1)
+                .unwrap_or("")
+                .to_string();
+            ships.push(nms_core::ShipSummary {
+                index,
+                name: ship.name.clone(),
+                ship_type: nms_core::ShipType::from_filename(&ship.resource.filename),
+                type_raw: folder,
+                class: nms_core::Grade::from_save_name(&ship.inventory.class.value),
+                primary,
+                general_slots: ship.inventory.unlocked(),
+                cargo_slots: ship.inventory_cargo.unlocked(),
+                tech_slots: ship.inventory_tech_only.unlocked(),
+                tech_installed: u16::try_from(
+                    ship.inventory.tech_count() + ship.inventory_tech_only.tech_count(),
+                )
+                .unwrap_or(u16::MAX),
+                damage: ship.inventory.stat("^SHIP_DAMAGE"),
+                shield: ship.inventory.stat("^SHIP_SHIELD"),
+                hyperdrive: ship.inventory.stat("^SHIP_HYPERDRIVE"),
+                agility: ship.inventory.stat("^SHIP_AGILE"),
+            });
+        }
+
+        let mut exocraft = Vec::new();
+        for (i, vehicle) in ps.vehicle_ownership.iter().enumerate() {
+            let index = u8::try_from(i).unwrap_or(u8::MAX);
+            let parked_at = (vehicle.location.0 != 0).then(|| {
+                nms_core::GalacticAddress::from_save_ua(vehicle.location.0, reality_index)
+            });
+            let access: Vec<String> = parked_at
+                .map(|addr| {
+                    bases
+                        .iter()
+                        .filter(|b| {
+                            is_planet_base(b)
+                                && b.galactic_address.to_galactic_address(reality_index) == addr
+                        })
+                        .map(base_label)
+                        .fold(Vec::new(), |mut acc, label| {
+                            if !acc.contains(&label) {
+                                acc.push(label);
+                            }
+                            acc
+                        })
+                })
+                .unwrap_or_default();
+            containers.push(vehicle.inventory.to_core(K::Exocraft { index }, access));
+            exocraft.push(nms_core::VehicleSummary {
+                index,
+                name: vehicle.name.clone(),
+                parked_at,
+                slots: vehicle.inventory.unlocked(),
+                tech_installed: u16::try_from(
+                    vehicle.inventory.tech_count() + vehicle.inventory_tech_only.tech_count(),
+                )
+                .unwrap_or(u16::MAX),
+            });
+        }
+
+        let mut multitools = Vec::new();
+        for (i, tool) in ps
+            .multitools
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.is_real())
+        {
+            let index = u8::try_from(i).unwrap_or(u8::MAX);
+            let active = i == ps.active_multitool_index as usize;
+            containers.push(tool.store.to_core(K::MultiTool { index, active }, vec![]));
+            multitools.push(nms_core::MultiToolSummary {
+                index,
+                name: tool.name.clone(),
+                class: nms_core::Grade::from_save_name(&tool.store.class.value),
+                active,
+                slots: tool.store.unlocked(),
+                tech_installed: u16::try_from(tool.store.tech_count()).unwrap_or(u16::MAX),
+                damage: tool.store.stat("^WEAPON_DAMAGE"),
+                mining: tool.store.stat("^WEAPON_MINING"),
+                scan: tool.store.stat("^WEAPON_SCAN"),
+            });
+        }
+
+        // Machine buffers list `^MAINT_*` placeholders at amount 0 for their empty cells; only what is actually in them counts.
+        for (i, machine) in ps.refiner_buffer_data.iter().enumerate() {
+            let mut buffer = machine.inventory_container.to_core(
+                K::MachineBuffer {
+                    index: u8::try_from(i).unwrap_or(u8::MAX),
+                },
+                vec![],
+            );
+            buffer
+                .stacks
+                .retain(|s| s.amount > 0 && !s.id.bare().starts_with("MAINT_"));
+            if !buffer.stacks.is_empty() {
+                containers.push(buffer);
+            }
+        }
+
+        containers.push(
+            ps.corvette_storage_inventory
+                .to_core(K::CorvetteParts, vec![]),
+        );
+        // `ChestMagicInventory` and `ChestMagic2Inventory` are not read: nobody knows what they are, so their contents stay out of every total.
+        for (key, grid) in [
+            (
+                "CookingIngredientsInventory",
+                &ps.cooking_ingredients_inventory,
+            ),
+            ("FishBaitBoxInventory", &ps.fish_bait_box_inventory),
+            ("FoodUnitInventory", &ps.food_unit_inventory),
+            ("RocketLockerInventory", &ps.rocket_locker_inventory),
+            ("GraveInventory", &ps.grave_inventory),
+        ] {
+            containers.push(grid.to_core(K::Other(key.to_string()), vec![]));
+        }
+
+        // Grids the player does not have (nothing unlocked, nothing in them) are left out.
+        containers.retain(|c| c.exists());
+
+        let mut holdings = nms_core::Holdings {
+            containers,
+            ships,
+            exocraft,
+            multitools,
+        };
+        holdings.sort();
+        holdings
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +595,165 @@ mod tests {
         assert_eq!(core.name, "My Base");
         assert_eq!(core.base_type, nms_core::BaseType::HomePlanetBase);
         assert_eq!(core.owner_uid.as_deref(), Some("76561198025707979"));
+    }
+
+    fn fixture() -> SaveRoot {
+        let json = include_str!("../../../data/test/multi_system_save.json");
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn holdings_from_fixture_containers_and_access() {
+        use nms_core::ContainerKind as K;
+        let h = fixture().to_core_holdings();
+        let kinds: Vec<&K> = h.containers.iter().map(|c| &c.kind).collect();
+        assert!(kinds.contains(&&K::Exosuit));
+        assert!(
+            !kinds.contains(&&K::ExosuitCargo),
+            "nothing unlocked, so the grid is left out"
+        );
+        assert!(kinds.contains(&&K::CorvetteParts));
+        assert_eq!(
+            kinds.len(),
+            17,
+            "no container for the unidentified ChestMagic grids the fixture carries"
+        );
+        assert!(kinds.contains(&&K::Other("CookingIngredientsInventory".into())));
+        assert_eq!(
+            kinds
+                .iter()
+                .filter(|k| matches!(k, K::MultiTool { .. }))
+                .count(),
+            1,
+            "WeaponInventory is not a second container"
+        );
+        assert_eq!(
+            kinds.iter().filter(|k| matches!(k, K::Ship { .. })).count(),
+            2,
+            "the empty ship slot is skipped"
+        );
+
+        let suit = h.exosuit().unwrap();
+        assert_eq!((suit.width, suit.height, suit.unlocked_slots), (10, 12, 93));
+        assert_eq!(suit.stacks.len(), 4);
+        assert_eq!(
+            suit.countable().count(),
+            3,
+            "the installed jetpack is not counted"
+        );
+        assert_eq!(suit.access, vec!["with you".to_string()]);
+
+        let storage1 = h.container(&K::Storage(1)).unwrap();
+        assert_eq!(
+            storage1.access,
+            vec![
+                "Lush Haven".to_string(),
+                "Frost Outpost".to_string(),
+                "Home Freighter".to_string()
+            ]
+        );
+        let storage2 = h.container(&K::Storage(2)).unwrap();
+        assert_eq!(
+            storage2.access,
+            vec!["Home Freighter".to_string()],
+            "only the freighter's room 1 opens container 2"
+        );
+
+        assert_eq!(
+            h.total(&nms_core::ItemId::new("^ASTEROID2")),
+            11_297,
+            "the 15 Gold in ChestMagicInventory are not counted"
+        );
+        assert_eq!(h.total(&nms_core::ItemId::new("^ASTEROID1")), 2_959);
+        assert_eq!(h.total(&nms_core::ItemId::new("^ASTEROID3")), 2_994);
+
+        let machine = h.container(&K::MachineBuffer { index: 0 }).unwrap();
+        assert_eq!(
+            machine.stacks.len(),
+            1,
+            "the ^MAINT_ placeholder at amount 0 is dropped"
+        );
+        assert_eq!(machine.stacks[0].amount, 180);
+    }
+
+    #[test]
+    fn holdings_from_fixture_ships_exocraft_and_tools() {
+        let h = fixture().to_core_holdings();
+        assert_eq!(h.ships.len(), 2);
+        let primary = h.primary_ship().unwrap();
+        assert_eq!(primary.index, 1);
+        assert_eq!(primary.name, "Starbird");
+        assert_eq!(primary.ship_type, Some(nms_core::ShipType::Exotic));
+        assert_eq!(primary.class, Some(nms_core::Grade::S));
+        assert_eq!(
+            (
+                primary.general_slots,
+                primary.cargo_slots,
+                primary.tech_slots
+            ),
+            (31, 0, 30)
+        );
+        assert_eq!(primary.tech_installed, 2);
+        assert_eq!(primary.hyperdrive, 90.0);
+        assert_eq!(h.ships[0].ship_type, Some(nms_core::ShipType::Fighter));
+        assert!(!h.ships[0].primary);
+
+        assert_eq!(h.exocraft.len(), 2);
+        assert!(h.exocraft[0].parked_at.is_some());
+        assert_eq!(h.exocraft[0].tech_installed, 2);
+        assert!(h.exocraft[1].parked_at.is_none());
+        let parked = h
+            .container(&nms_core::ContainerKind::Exocraft { index: 0 })
+            .unwrap();
+        assert_eq!(
+            parked.access,
+            vec!["Lush Haven".to_string()],
+            "the freighter at the same address is not a parking place"
+        );
+
+        assert_eq!(h.multitools.len(), 1);
+        assert!(h.multitools[0].active);
+        assert_eq!(h.multitools[0].slots, 24);
+        assert_eq!(h.multitools[0].tech_installed, 3);
+        assert_eq!(h.multitools[0].scan, 100.0);
+    }
+
+    #[test]
+    fn holdings_from_empty_player_state_is_empty() {
+        let save: SaveRoot = serde_json::from_str(r#"{"Version": 4720, "Platform": "Mac|Final", "ActiveContext": "Main", "CommonStateData": {"SaveName": "t"}, "BaseContext": {"GameMode": 1, "PlayerStateData": {}}, "DiscoveryManagerData": {"DiscoveryData-v1": {"Store": {"Record": []}}}}"#).unwrap();
+        let h = save.to_core_holdings();
+        assert!(h.containers.is_empty());
+        assert!(h.ships.is_empty());
+        assert!(h.exocraft.is_empty());
+        assert!(h.multitools.is_empty());
+    }
+
+    #[test]
+    fn negative_amounts_clamp_to_zero() {
+        let slot: InventorySlot = serde_json::from_str(r#"{"Id": "^ASTEROID2", "Amount": -5, "MaxAmount": 9999, "Index": {"X": 1, "Y": 2}, "Type": {"InventoryType": "Substance"}}"#).unwrap();
+        let stack = slot.to_core();
+        assert_eq!(stack.amount, 0);
+        assert_eq!(stack.slot, (1, 2));
+        assert_eq!(stack.kind, Some(nms_core::ItemKind::Substance));
+    }
+
+    #[test]
+    fn storage_numbers_from_object_ids() {
+        assert_eq!(storage_number("^CONTAINER0"), Some(1));
+        assert_eq!(storage_number("^CONTAINER9"), Some(10));
+        assert_eq!(storage_number("^FRE_ROOM_STORE3"), Some(4));
+        assert_eq!(storage_number("^CONTAINER"), None);
+        assert_eq!(storage_number("^SNOWPLANT"), None);
+    }
+
+    #[test]
+    fn player_ship_base_type_is_kept() {
+        let json = r#"{"Name": "Default", "BaseType": {"PersistentBaseTypes": "PlayerShipBase"}, "GalacticAddress": "0x00100000000064", "Position": [0.0, 0.0, 0.0], "Owner": {"UID": ""}, "Objects": []}"#;
+        let base: PersistentPlayerBase = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            base.to_core_base().base_type,
+            nms_core::BaseType::PlayerShipBase
+        );
     }
 
     #[test]

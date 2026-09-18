@@ -11,6 +11,7 @@ mod find;
 mod fleet;
 mod import;
 mod info;
+mod inventory;
 mod list;
 mod raw;
 mod route;
@@ -110,6 +111,35 @@ enum Commands {
 
         /// An expedition number for the full view, or "frigates" for every frigate. Omit for the overview.
         target: Option<String>,
+    },
+
+    /// Do I have an item, how much, and where? Matches item names and IDs.
+    Have {
+        /// Path to save file (auto-detects if omitted).
+        #[arg(long)]
+        save: Option<PathBuf>,
+
+        /// Name or ID to look for (substring, case-insensitive), e.g. gold or ASTEROID2.
+        #[arg(required = true, num_args = 1..)]
+        pattern: Vec<String>,
+
+        /// Only items of this type: substance, product, or technology.
+        #[arg(long = "type")]
+        kind: Option<String>,
+    },
+
+    /// Every container and how full it is, or one container's contents.
+    Inventory {
+        /// Path to save file (auto-detects if omitted).
+        #[arg(long)]
+        save: Option<PathBuf>,
+
+        /// A container to show in full ("storage 3", exosuit, freighter, "ship 1") or a word its label contains (ship, storage).
+        container: Vec<String>,
+
+        /// Order by free slots, most first, and leave out full containers.
+        #[arg(long)]
+        free: bool,
     },
 
     /// Display aggregate galaxy statistics.
@@ -375,6 +405,25 @@ pub(crate) enum ListTargetCmd {
     /// List terrain generation types (GcBiomeSubType).
     #[command(name = "terrain-types")]
     TerrainTypes,
+    /// List every item you hold with its total across all containers.
+    Items {
+        /// Only items of this type: substance, product, or technology.
+        #[arg(long = "type")]
+        kind: Option<String>,
+
+        /// Only items with at least this many.
+        #[arg(long, default_value = "0")]
+        min: u32,
+
+        /// Only items whose name or ID contains this.
+        pattern: Option<String>,
+    },
+    /// List owned ships with type, class, slots, and bonuses.
+    Ships,
+    /// List owned exocraft and where each is parked.
+    Exocraft,
+    /// List owned multi-tools with class, slots, and bonuses.
+    Multitools,
 }
 
 /// Resolve a save file path from --save, --slot, or auto-detect.
@@ -468,6 +517,22 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Fleet { save, target } => {
             let path = resolve_save_with_slot(save, slot)?;
             fleet::run(Some(path), target)
+        }
+        Commands::Have {
+            save,
+            pattern,
+            kind,
+        } => {
+            let path = resolve_save_with_slot(save, slot)?;
+            inventory::run_have(Some(path), pattern, kind)
+        }
+        Commands::Inventory {
+            save,
+            container,
+            free,
+        } => {
+            let path = resolve_save_with_slot(save, slot)?;
+            inventory::run_inventory(Some(path), container, free)
         }
         Commands::Stats {
             save,

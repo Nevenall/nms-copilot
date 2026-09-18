@@ -136,6 +136,108 @@ fn dispatch_set_position_to_base() {
     assert!(output.contains("Test Base"));
 }
 
+mod inventory {
+    use nms_copilot::commands::parse_line;
+    use nms_copilot::dispatch::dispatch;
+    use nms_copilot::session::SessionState;
+    use nms_graph::GalaxyModel;
+
+    fn fixture() -> (GalaxyModel, SessionState) {
+        let json = include_str!("../../../data/test/multi_system_save.json");
+        let save = nms_save::parse_save(json.as_bytes()).unwrap();
+        let model = GalaxyModel::from_save(&save);
+        let session = SessionState::from_model(&model);
+        (model, session)
+    }
+
+    fn run(line: &str) -> Result<String, String> {
+        let (model, mut session) = fixture();
+        let action = parse_line(line).unwrap().unwrap();
+        dispatch(&action, &model, &mut session)
+    }
+
+    fn plain(s: &str) -> String {
+        let mut out = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\u{1b}' {
+                for next in chars.by_ref() {
+                    if next == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_have_gold_totals_and_locations() {
+        let out = plain(&run("have gold").unwrap());
+        assert!(out.contains("Gold (ASTEROID2)"), "{out}");
+        assert!(out.contains("11,297"), "{out}");
+        assert!(
+            out.contains("Lush Haven, Frost Outpost, Home Freighter"),
+            "{out}"
+        );
+        assert!(out.contains("with you"), "{out}");
+    }
+
+    #[test]
+    fn test_have_by_id_and_type() {
+        let out = plain(&run("have asteroid1").unwrap());
+        assert!(out.contains("Silver"), "{out}");
+        assert!(out.contains("2,959"), "{out}");
+        let out = plain(&run("have gold --type product").unwrap());
+        assert!(out.contains("Nothing matching"), "{out}");
+        assert!(
+            run("have gold --type ore")
+                .unwrap_err()
+                .contains("unknown item type")
+        );
+    }
+
+    #[test]
+    fn test_inventory_overview_contents_and_free() {
+        let out = plain(&run("inventory").unwrap());
+        assert!(out.contains("Storage 1"), "{out}");
+        assert!(out.contains("4 / 93"), "{out}");
+        assert!(
+            !out.contains("Exosuit cargo"),
+            "nothing unlocked, so not listed: {out}"
+        );
+        let out = plain(&run("inventory storage 1").unwrap());
+        assert!(out.contains("Gold"), "{out}");
+        assert!(out.contains("Platinum"), "{out}");
+        let out = plain(&run("inventory --free").unwrap());
+        let corvette = out.find("Corvette parts").unwrap();
+        let storage2 = out.find("Storage 2").unwrap();
+        assert!(corvette < storage2, "most free first: {out}");
+        assert!(
+            run("inventory locker")
+                .unwrap_err()
+                .contains("no container matches")
+        );
+    }
+
+    #[test]
+    fn test_list_items_ships_exocraft_multitools() {
+        let out = plain(&run("list items --min 1000").unwrap());
+        assert!(out.contains("Gold"), "{out}");
+        assert!(out.contains("Ferrite Dust"), "{out}");
+        assert!(!out.contains("Oxygen"), "under the minimum: {out}");
+        let out = plain(&run("list ships").unwrap());
+        assert!(out.contains("Starbird *"), "{out}");
+        assert!(out.contains("Exotic"), "{out}");
+        let out = plain(&run("list exocraft").unwrap());
+        assert!(out.contains("Lush Haven"), "{out}");
+        let out = plain(&run("list multitools").unwrap());
+        assert!(out.contains("Multi-tool 1 *"), "{out}");
+    }
+}
+
 mod backup {
     use super::setup;
     use nms_copilot::commands::parse_line;

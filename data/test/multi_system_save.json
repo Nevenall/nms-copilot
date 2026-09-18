@@ -70,6 +70,334 @@
             ],
             "ExpeditionSeedsSelectedToday": ["0x5F98B405C7B30D18"],
             "LastKnownDay": 20710,
+            "Inventory": {
+                "Width": 10, "Height": 12, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}, {"X": 0, "Y": 5}, {"X": 1, "Y": 5}, {"X": 2, "Y": 5}, {"X": 3, "Y": 5}, {"X": 4, "Y": 5}, {"X": 5, "Y": 5}, {"X": 6, "Y": 5}, {"X": 7, "Y": 5}, {"X": 8, "Y": 5}, {"X": 9, "Y": 5}, {"X": 0, "Y": 6}, {"X": 1, "Y": 6}, {"X": 2, "Y": 6}, {"X": 3, "Y": 6}, {"X": 4, "Y": 6}, {"X": 5, "Y": 6}, {"X": 6, "Y": 6}, {"X": 7, "Y": 6}, {"X": 8, "Y": 6}, {"X": 9, "Y": 6}, {"X": 0, "Y": 7}, {"X": 1, "Y": 7}, {"X": 2, "Y": 7}, {"X": 3, "Y": 7}, {"X": 4, "Y": 7}, {"X": 5, "Y": 7}, {"X": 6, "Y": 7}, {"X": 7, "Y": 7}, {"X": 8, "Y": 7}, {"X": 9, "Y": 7}, {"X": 0, "Y": 8}, {"X": 1, "Y": 8}, {"X": 2, "Y": 8}, {"X": 3, "Y": 8}, {"X": 4, "Y": 8}, {"X": 5, "Y": 8}, {"X": 6, "Y": 8}, {"X": 7, "Y": 8}, {"X": 8, "Y": 8}, {"X": 9, "Y": 8}, {"X": 0, "Y": 9}, {"X": 1, "Y": 9}, {"X": 2, "Y": 9}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^ASTEROID2", "Amount": 371, "MaxAmount": 9999, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^OXYGEN", "Amount": 250, "MaxAmount": 9999, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^PRODFUEL2", "Amount": 29, "MaxAmount": 200, "Index": {"X": 2, "Y": 0}, "Type": {"InventoryType": "Product"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^JET1", "Amount": 100, "MaxAmount": 100, "Index": {"X": 3, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "Inventory_Cargo": {
+                "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": []
+            },
+            "Inventory_TechOnly": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}, {"X": 0, "Y": 5}, {"X": 1, "Y": 5}, {"X": 2, "Y": 5}, {"X": 3, "Y": 5}, {"X": 4, "Y": 5}, {"X": 5, "Y": 5}, {"X": 6, "Y": 5}, {"X": 7, "Y": 5}, {"X": 8, "Y": 5}, {"X": 9, "Y": 5}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^SUIT_PROTECT", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^PROTECT", "Amount": 100, "MaxAmount": 100, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "FreighterInventory": {
+                "Width": 7, "Height": 5, "Class": {"InventoryClass": "A"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^ASTEROID1", "Amount": 1000, "MaxAmount": 9999, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "FreighterInventory_Cargo": {
+                "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": []
+            },
+            "FreighterInventory_TechOnly": {
+                "Width": 7, "Height": 5, "Class": {"InventoryClass": "A"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^FREI_HYP", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "Chest1Inventory": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^ASTEROID2", "Amount": 9999, "MaxAmount": 9999, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^ASTEROID2", "Amount": 927, "MaxAmount": 9999, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^ASTEROID1", "Amount": 1959, "MaxAmount": 9999, "Index": {"X": 2, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^ASTEROID3", "Amount": 2994, "MaxAmount": 9999, "Index": {"X": 3, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "Chest2Inventory": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^GAS1", "Amount": 500, "MaxAmount": 9999, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^GAS2", "Amount": 40, "MaxAmount": 9999, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^GAS3", "Amount": 12, "MaxAmount": 9999, "Index": {"X": 2, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^STELLAR2", "Amount": 235, "MaxAmount": 9999, "Index": {"X": 3, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^LAND1", "Amount": 1186, "MaxAmount": 9999, "Index": {"X": 4, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "ChestMagicInventory": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^ASTEROID2", "Amount": 15, "MaxAmount": 9999, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "ChestMagic2Inventory": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": []
+            },
+            "CorvetteStorageInventory": {
+                "Width": 10, "Height": 16, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}, {"X": 0, "Y": 5}, {"X": 1, "Y": 5}, {"X": 2, "Y": 5}, {"X": 3, "Y": 5}, {"X": 4, "Y": 5}, {"X": 5, "Y": 5}, {"X": 6, "Y": 5}, {"X": 7, "Y": 5}, {"X": 8, "Y": 5}, {"X": 9, "Y": 5}, {"X": 0, "Y": 6}, {"X": 1, "Y": 6}, {"X": 2, "Y": 6}, {"X": 3, "Y": 6}, {"X": 4, "Y": 6}, {"X": 5, "Y": 6}, {"X": 6, "Y": 6}, {"X": 7, "Y": 6}, {"X": 8, "Y": 6}, {"X": 9, "Y": 6}, {"X": 0, "Y": 7}, {"X": 1, "Y": 7}, {"X": 2, "Y": 7}, {"X": 3, "Y": 7}, {"X": 4, "Y": 7}, {"X": 5, "Y": 7}, {"X": 6, "Y": 7}, {"X": 7, "Y": 7}, {"X": 8, "Y": 7}, {"X": 9, "Y": 7}, {"X": 0, "Y": 8}, {"X": 1, "Y": 8}, {"X": 2, "Y": 8}, {"X": 3, "Y": 8}, {"X": 4, "Y": 8}, {"X": 5, "Y": 8}, {"X": 6, "Y": 8}, {"X": 7, "Y": 8}, {"X": 8, "Y": 8}, {"X": 9, "Y": 8}, {"X": 0, "Y": 9}, {"X": 1, "Y": 9}, {"X": 2, "Y": 9}, {"X": 3, "Y": 9}, {"X": 4, "Y": 9}, {"X": 5, "Y": 9}, {"X": 6, "Y": 9}, {"X": 7, "Y": 9}, {"X": 8, "Y": 9}, {"X": 9, "Y": 9}, {"X": 0, "Y": 10}, {"X": 1, "Y": 10}, {"X": 2, "Y": 10}, {"X": 3, "Y": 10}, {"X": 4, "Y": 10}, {"X": 5, "Y": 10}, {"X": 6, "Y": 10}, {"X": 7, "Y": 10}, {"X": 8, "Y": 10}, {"X": 9, "Y": 10}, {"X": 0, "Y": 11}, {"X": 1, "Y": 11}, {"X": 2, "Y": 11}, {"X": 3, "Y": 11}, {"X": 4, "Y": 11}, {"X": 5, "Y": 11}, {"X": 6, "Y": 11}, {"X": 7, "Y": 11}, {"X": 8, "Y": 11}, {"X": 9, "Y": 11}, {"X": 0, "Y": 12}, {"X": 1, "Y": 12}, {"X": 2, "Y": 12}, {"X": 3, "Y": 12}, {"X": 4, "Y": 12}, {"X": 5, "Y": 12}, {"X": 6, "Y": 12}, {"X": 7, "Y": 12}, {"X": 8, "Y": 12}, {"X": 9, "Y": 12}, {"X": 0, "Y": 13}, {"X": 1, "Y": 13}, {"X": 2, "Y": 13}, {"X": 3, "Y": 13}, {"X": 4, "Y": 13}, {"X": 5, "Y": 13}, {"X": 6, "Y": 13}, {"X": 7, "Y": 13}, {"X": 8, "Y": 13}, {"X": 9, "Y": 13}, {"X": 0, "Y": 14}, {"X": 1, "Y": 14}, {"X": 2, "Y": 14}, {"X": 3, "Y": 14}, {"X": 4, "Y": 14}, {"X": 5, "Y": 14}, {"X": 6, "Y": 14}, {"X": 7, "Y": 14}, {"X": 8, "Y": 14}, {"X": 9, "Y": 14}, {"X": 0, "Y": 15}, {"X": 1, "Y": 15}, {"X": 2, "Y": 15}, {"X": 3, "Y": 15}, {"X": 4, "Y": 15}, {"X": 5, "Y": 15}, {"X": 6, "Y": 15}, {"X": 7, "Y": 15}, {"X": 8, "Y": 15}, {"X": 9, "Y": 15}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^B_CON_5", "Amount": 2, "MaxAmount": 20, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Product"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^B_WNG_G", "Amount": 1, "MaxAmount": 20, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Product"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "CookingIngredientsInventory": {
+                "Width": 10, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 7, "Y": 2}, {"X": 8, "Y": 2}, {"X": 9, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 7, "Y": 3}, {"X": 8, "Y": 3}, {"X": 9, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 7, "Y": 4}, {"X": 8, "Y": 4}, {"X": 9, "Y": 4}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": [
+                    {"Id": "^FOOD_B_APPLE", "Amount": 3, "MaxAmount": 20, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Product"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "FishBaitBoxInventory": {
+                "Width": 1, "Height": 1, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}],
+                "SpecialSlots": [],
+                "BaseStatValues": [],
+                "Slots": []
+            },
+            "WeaponInventory": {
+                "Width": 10, "Height": 6, "Class": {"InventoryClass": "S"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}],
+                "SpecialSlots": [],
+                "BaseStatValues": [{"BaseStatID": "^WEAPON_DAMAGE", "Value": 15.0}, {"BaseStatID": "^WEAPON_MINING", "Value": 26.0}, {"BaseStatID": "^WEAPON_SCAN", "Value": 100.0}],
+                "Slots": [
+                    {"Id": "^LASER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^GRENADE", "Amount": 100, "MaxAmount": 100, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                    {"Id": "^SCANNER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 2, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                ]
+            },
+            "ShipOwnership": [
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "MODELS/COMMON/SPACECRAFT/FIGHTERS/FIGHTER_PROC.SCENE.MBIN", "Seed": [true, "0x1"]},
+                    "Inventory": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "A"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [{"BaseStatID": "^SHIP_DAMAGE", "Value": 58.0}, {"BaseStatID": "^SHIP_SHIELD", "Value": 29.0}, {"BaseStatID": "^SHIP_HYPERDRIVE", "Value": 0.0}, {"BaseStatID": "^SHIP_AGILE", "Value": 26.0}],
+                        "Slots": [
+                            {"Id": "^LAUNCHER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Inventory_Cargo": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "A"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_TechOnly": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "A"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": [
+                            {"Id": "^SHIPGUN1", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^HYPERDRIVE", "Amount": 100, "MaxAmount": 100, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Location": 0,
+                    "Position": [0.0, 0.0, 0.0, 0.0]
+                },
+                {
+                    "Name": "Starbird",
+                    "Resource": {"Filename": "MODELS/COMMON/SPACECRAFT/S-CLASS/S-CLASS_PROC.SCENE.MBIN", "Seed": [true, "0x1"]},
+                    "Inventory": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "S"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [{"BaseStatID": "^SHIP_DAMAGE", "Value": 74.0}, {"BaseStatID": "^SHIP_SHIELD", "Value": 81.0}, {"BaseStatID": "^SHIP_HYPERDRIVE", "Value": 90.0}, {"BaseStatID": "^SHIP_AGILE", "Value": 48.0}],
+                        "Slots": [
+                            {"Id": "^LAUNCHER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^STELLAR2", "Amount": 100, "MaxAmount": 9999, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Inventory_Cargo": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "S"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_TechOnly": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "S"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": [
+                            {"Id": "^SHIPGUN1", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Location": 0,
+                    "Position": [0.0, 0.0, 0.0, 0.0]
+                },
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "", "Seed": [true, "0x1"]},
+                    "Inventory": {
+                        "Width": 0, "Height": 0, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_Cargo": {
+                        "Width": 0, "Height": 0, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_TechOnly": {
+                        "Width": 0, "Height": 0, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Location": 0,
+                    "Position": [0.0, 0.0, 0.0, 0.0]
+                }
+            ],
+            "PrimaryShip": 1,
+            "VehicleOwnership": [
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "", "Seed": [true, "0x1"]},
+                    "Inventory": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}, {"X": 2, "Y": 4}, {"X": 3, "Y": 4}, {"X": 4, "Y": 4}, {"X": 5, "Y": 4}, {"X": 6, "Y": 4}, {"X": 0, "Y": 5}, {"X": 1, "Y": 5}, {"X": 2, "Y": 5}, {"X": 3, "Y": 5}, {"X": 4, "Y": 5}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_Cargo": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_TechOnly": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": [
+                            {"Id": "^VEHICLE_ENGINE", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^VEHICLE_BOOST", "Amount": 100, "MaxAmount": 100, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Location": "0x00100000000064",
+                    "Position": [0.0, 0.0, 0.0, 0.0]
+                },
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "", "Seed": [true, "0x1"]},
+                    "Inventory": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}, {"X": 6, "Y": 2}, {"X": 0, "Y": 3}, {"X": 1, "Y": 3}, {"X": 2, "Y": 3}, {"X": 3, "Y": 3}, {"X": 4, "Y": 3}, {"X": 5, "Y": 3}, {"X": 6, "Y": 3}, {"X": 0, "Y": 4}, {"X": 1, "Y": 4}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_Cargo": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    },
+                    "Inventory_TechOnly": {
+                        "Width": 7, "Height": 5, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}, {"X": 4, "Y": 2}, {"X": 5, "Y": 2}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": [
+                            {"Id": "^VEHICLE_ENGINE", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    },
+                    "Location": 0,
+                    "Position": [0.0, 0.0, 0.0, 0.0]
+                }
+            ],
+            "Multitools": [
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "MODELS/COMMON/WEAPONS/MULTITOOL/MULTITOOL.SCENE.MBIN", "Seed": [true, "0x1"]},
+                    "Store": {
+                        "Width": 10, "Height": 6, "Class": {"InventoryClass": "S"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [{"X": 0, "Y": 0}, {"X": 1, "Y": 0}, {"X": 2, "Y": 0}, {"X": 3, "Y": 0}, {"X": 4, "Y": 0}, {"X": 5, "Y": 0}, {"X": 6, "Y": 0}, {"X": 7, "Y": 0}, {"X": 8, "Y": 0}, {"X": 9, "Y": 0}, {"X": 0, "Y": 1}, {"X": 1, "Y": 1}, {"X": 2, "Y": 1}, {"X": 3, "Y": 1}, {"X": 4, "Y": 1}, {"X": 5, "Y": 1}, {"X": 6, "Y": 1}, {"X": 7, "Y": 1}, {"X": 8, "Y": 1}, {"X": 9, "Y": 1}, {"X": 0, "Y": 2}, {"X": 1, "Y": 2}, {"X": 2, "Y": 2}, {"X": 3, "Y": 2}],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [{"BaseStatID": "^WEAPON_DAMAGE", "Value": 15.0}, {"BaseStatID": "^WEAPON_MINING", "Value": 26.0}, {"BaseStatID": "^WEAPON_SCAN", "Value": 100.0}],
+                        "Slots": [
+                            {"Id": "^LASER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^GRENADE", "Amount": 100, "MaxAmount": 100, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^SCANNER", "Amount": 100, "MaxAmount": 100, "Index": {"X": 2, "Y": 0}, "Type": {"InventoryType": "Technology"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    }
+                },
+                {
+                    "Name": "",
+                    "Resource": {"Filename": "", "Seed": [true, "0x1"]},
+                    "Store": {
+                        "Width": 0, "Height": 0, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": []
+                    }
+                }
+            ],
+            "ActiveMultioolIndex": 0,
+            "RefinerBufferData": [
+                {"AmountAccumulators": [0.0, 0.0, 0.0], "InventoryContainer": {
+                        "Width": 16, "Height": 1, "Class": {"InventoryClass": "C"}, "Name": "", "StackSizeGroup": {"InventoryStackSizeGroup": "Personal"},
+                        "ValidSlotIndices": [],
+                        "SpecialSlots": [],
+                        "BaseStatValues": [],
+                        "Slots": [
+                            {"Id": "^MAINT_TECH8", "Amount": 0, "MaxAmount": 100, "Index": {"X": 0, "Y": 0}, "Type": {"InventoryType": "Product"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false},
+                            {"Id": "^STELLAR2", "Amount": 180, "MaxAmount": 350, "Index": {"X": 1, "Y": 0}, "Type": {"InventoryType": "Substance"}, "DamageFactor": 0.0, "FullyInstalled": true, "AddedAutomatically": false}
+                        ]
+                    }}
+            ],
             "PersistentPlayerBases": [
                 {
                     "BaseVersion": 8,
@@ -79,7 +407,9 @@
                     "LastUpdateTimestamp": 1700000000,
                     "Objects": [
                         {"ObjectID": "^SNOWPLANT", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 15461882265600},
+                        {"ObjectID": "^CONTAINER0", "Position": [50.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 0},
                         {"ObjectID": "^SNOWPLANT", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 15461882265600},
+                        {"ObjectID": "^CONTAINER0", "Position": [50.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 0},
                         {"ObjectID": "^RADIOPLANT", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 4312147165184},
                         {"ObjectID": "^RADIOPLANT", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 4312147165184},
                         {"ObjectID": "^RADIOPLANT", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 4312147165184},
@@ -111,7 +441,9 @@
                     "Position": [50.0, 100.0, 150.0],
                     "Forward": [0.0, 0.0, 1.0],
                     "LastUpdateTimestamp": 1700100000,
-                    "Objects": [],
+                    "Objects": [
+                        {"ObjectID": "^CONTAINER0", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1789402087, "UserData": 0}
+                    ],
                     "RID": "",
                     "Owner": { "LID": "", "UID": "123", "USN": "TestUser", "PTK": "ST", "TS": 1700100000 },
                     "Name": "Frost Outpost",
@@ -128,7 +460,8 @@
                     "Objects": [
                         {"ObjectID": "^FRE_ROOM_FLEET", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0},
                         {"ObjectID": "^FRE_ROOM_FLEET", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0},
-                        {"ObjectID": "^FRE_ROOM_STORE0", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0}
+                        {"ObjectID": "^FRE_ROOM_STORE0", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0},
+                        {"ObjectID": "^FRE_ROOM_STORE1", "Position": [0.0, 0.0, 0.0], "Up": [0.0, 1.0, 0.0], "At": [0.0, 0.0, 1.0], "Timestamp": 1700100000, "UserData": 0}
                     ],
                     "RID": "",
                     "Owner": { "LID": "", "UID": "123", "USN": "TestUser", "PTK": "ST", "TS": 1700100000 },

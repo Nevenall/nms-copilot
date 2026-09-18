@@ -131,21 +131,24 @@ impl FrigateClass {
     }
 }
 
-/// Frigate grade, C to S.
+/// A grade, C to S: a frigate's grade, or the class of a ship, multi-tool, or inventory grid (`InventoryClass` in the save).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 #[non_exhaustive]
-pub enum FrigateGrade {
+pub enum Grade {
     C,
     B,
     A,
     S,
 }
 
-impl FrigateGrade {
+/// The grade of a frigate; the same scale as every other C-to-S class in the save.
+pub type FrigateGrade = Grade;
+
+impl Grade {
     pub fn from_save_name(name: &str) -> Option<Self> {
         match name {
             "C" => Some(Self::C),

@@ -39,6 +39,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
         bases,
         player_state: model.player_state.clone(),
         fleet: model.fleet.clone(),
+        holdings: model.holdings.clone(),
         save_version,
         cached_at,
     }
@@ -48,7 +49,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
 const CACHE_MAGIC: &[u8; 4] = b"NMSC";
 
 /// Version of the archived data. Bump whenever an archived type changes shape, or whenever a decoding rule that feeds archived data changes (base objects are stored decoded), so caches written by an older binary are rebuilt instead of trusted.
-pub const CACHE_FORMAT_VERSION: u32 = 5;
+pub const CACHE_FORMAT_VERSION: u32 = 6;
 
 const HEADER_LEN: usize = CACHE_MAGIC.len() + 4;
 
@@ -139,6 +140,7 @@ pub fn rebuild_model(data: &CacheData) -> GalaxyModel {
 
     model.player_state = data.player_state.clone();
     model.fleet = data.fleet.clone();
+    model.holdings = data.holdings.clone();
     model.build_edges(EdgeStrategy::default());
 
     model
@@ -262,6 +264,51 @@ mod tests {
         bytes[4..8].copy_from_slice(&(CACHE_FORMAT_VERSION + 1).to_le_bytes());
         let err = deserialize(&bytes).unwrap_err();
         assert!(err.to_string().contains("version"), "{err}");
+    }
+
+    #[test]
+    fn cache_round_trips_holdings() {
+        use nms_core::holdings::{
+            Container, ContainerKind, Holdings, ItemId, ItemKind, ItemStack, ShipSummary, ShipType,
+        };
+        let mut model = GalaxyModel::new();
+        let mut holdings = Holdings::default();
+        holdings.containers.push(Container {
+            kind: ContainerKind::Storage(3),
+            class: Some(nms_core::Grade::C),
+            width: 10,
+            height: 6,
+            unlocked_slots: 50,
+            stacks: vec![ItemStack {
+                id: ItemId::new("^ASTEROID2"),
+                kind: Some(ItemKind::Substance),
+                amount: 9999,
+                max: 9999,
+                slot: (2, 3),
+            }],
+            access: vec!["Freighter".into()],
+        });
+        holdings.ships.push(ShipSummary {
+            index: 0,
+            name: String::new(),
+            ship_type: Some(ShipType::Hauler),
+            type_raw: "DROPSHIPS".into(),
+            class: Some(nms_core::Grade::A),
+            primary: true,
+            general_slots: 40,
+            cargo_slots: 0,
+            tech_slots: 25,
+            tech_installed: 6,
+            damage: 58.0,
+            shield: 69.0,
+            hyperdrive: 32.0,
+            agility: 27.0,
+        });
+        model.holdings = Some(holdings.clone());
+        let data = extract_cache_data(&model, 4720);
+        let restored = deserialize(&serialize(&data).unwrap()).unwrap();
+        let rebuilt = rebuild_model(&restored);
+        assert_eq!(rebuilt.holdings, Some(holdings));
     }
 
     #[test]

@@ -51,6 +51,7 @@ Use `--headless` to run just the MCP server without the REPL (e.g., for Claude D
 - **Interactive galaxy map** -- full-screen TUI with galaxy, region, and local zoom levels
 - **Live file watching** -- detects auto-saves while you play and updates the model in real time
 - **rkyv cache** -- zero-copy serialization for near-instant startup after the first load
+- **Inventory** -- do I have gold, how much, and where: every container, ship, exocraft, and multi-tool, with item names from the game's data
 - **Multi-save support** -- switch between save slots (up to 15)
 - **Export & import** -- JSON/CSV export of filtered data; CSV import of community coordinates
 - **MCP server** -- stdio and HTTP transports for AI copilot integration (Claude Desktop, etc.)
@@ -145,10 +146,17 @@ nms base "Farm" --width 160           # lay the sections out side by side at thi
 nms fleet                             # frigate expeditions: waiting for you, returned, or under way; the Navigator's offers left
 nms fleet 1                           # one expedition: its frigates and the event log
 nms fleet frigates                    # every frigate: class, grade, stats, modules, and whether it is out
+nms have gold                         # do I have it, how much, and in which container, reachable from where
+nms have gas --type substance         # several matches, one block each; --type substance | product | technology
+nms inventory                         # every container: class, used of unlocked slots, free, reachable from
+nms inventory --free                  # most free slots first
+nms inventory storage 3               # one container's contents; a word like "ship" lists every matching grid
 nms stats --biomes                    # biome distribution table
 nms stats --discoveries               # discovery counts by type
 nms saves                             # list all save slots
 ```
+
+`have` matches item names and the game's internal IDs (`have asteroid2` finds Gold), totals across every grid, and lists each stack with the bases a storage container can be opened from. Names come from a bundled table generated from the [AssistantNMS API](https://api.nmsassistant.com) by `scripts/gen-items.py`; an ID the table does not know is shown as itself. Free space is the unlocked slots minus the occupied ones, so a cargo grid nothing has been bought for reports nothing rather than an empty 7×5. Technology slots hold charge, not a count, and are never totalled.
 
 `base "Name"` lists a base's supply networks as A, B, C. Nothing in the save says which depots and extractors share a network, so the networks are traced through the pipes: a supply pipe records its own run, pipes that meet end to end are one network, a pipe joins the machine it reaches, and depots built touching each other join without a pipe. See [docs/reference/nms-save-notes.md](docs/reference/nms-save-notes.md#wires-pipes-and-cables-what-is-connected-to-what).
 
@@ -195,6 +203,11 @@ nms list terrain-types                 # terrain generation types
 nms list bases                         # all player bases
 nms list systems --limit 10            # first 10 discovered systems
 nms list systems --all                 # all discovered systems
+nms list items                         # everything you hold, largest total first
+nms list items --min 1000 --type substance
+nms list ships                         # type, class, slots, installed tech, class bonuses; the primary marked
+nms list exocraft                      # each exocraft and the base it is parked at
+nms list multitools                    # class, slots, installed tech, bonuses; the equipped one marked
 ```
 
 ### Shell Completions
@@ -273,6 +286,8 @@ REPL-only commands:
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
 | `status` | Show current session state and base and fleet alerts |
 | `fleet [N\|frigates]` | Frigate expeditions, one expedition in full, or every frigate |
+| `have <item> [--type T]` | Do I have it, how much, and where; completes item names |
+| `inventory [container] [--free]` | Every container and how full it is, or one container's contents |
 | `backup [--label L]` | Snapshot the save now |
 | `backup on\|off\|list` | Automatic snapshots for this session, or what is kept |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
@@ -288,8 +303,9 @@ REPL-only commands:
 │System       Lauderen · 6 planets          Units        551,213,032                               │
 │Address      2043FC956DEC                  Nanites      4,253                                     │
 │From centre  127,412 ly                    Quicksilver  240                                       │
-│Warped from  Ekitok                        Freighter    in this system                            │
-│Known        293 systems · 644 planets     Bases        8                                         │
+│Warped from  Ekitok                        Inventory    Exosuit 30/93 · Storage 1, Storage 3 full │
+│Known        293 systems · 644 planets     Ships        10 · Ship 1 (Fighter S)                   │
+│Bases        8                             Freighter    in this system                            │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ BASES ───────────────────────────────────────────────────────────────────────────────────────────┐
 │Base                Type      Crops     Next    Extraction                 Power                  │
@@ -312,7 +328,7 @@ REPL-only commands:
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The player section carries where you are, how far out from the centre, where you warped from, where the freighter is, what you are carrying, and how much of the galaxy the atlas holds. The rest are framed boxes holding the REPL's own tables: a bar of column names over rows on the deep-space navy. Sections share the height between them, so a screen too short for everything trims each one rather than starving the ones at the bottom. The log yields first, since it is history and the tables above it are the live state, and it takes the slack when everything fits. The bases and the fleet carry the same columns and the same cell text as the `base` and `fleet` overviews, so what you read on the dashboard is what those commands print, with a `Next` column added for the soonest harvest. Below about 150 columns the two panels stack so each keeps its full width; above that they sit side by side. Keys: `:` or Enter drops to the prompt and `q` quits.
+The player section carries where you are, how far out from the centre, where you warped from, and how much of the galaxy the atlas holds on the left; what you are carrying, how full the exosuit is and which storage containers are full, how many ships you own and which you are flying, and where the freighter is on the right. The rest are framed boxes holding the REPL's own tables: a bar of column names over rows on the deep-space navy. Sections share the height between them, so a screen too short for everything trims each one rather than starving the ones at the bottom. The log yields first, since it is history and the tables above it are the live state, and it takes the slack when everything fits. The bases and the fleet carry the same columns and the same cell text as the `base` and `fleet` overviews, so what you read on the dashboard is what those commands print, with a `Next` column added for the soonest harvest. Below about 150 columns the two panels stack so each keeps its full width; above that they sit side by side. Keys: `:` or Enter drops to the prompt and `q` quits.
 
 The dashboard is drawn in the terminal's own buffer, not a separate screen, and leaves the bottom rows clear. Pressing `:` puts the prompt on the first of those rows with the dashboard still above it, so a command's output scrolls the dashboard up the way any other output would, and a short answer sits under a dashboard you can still read. A reminder of the way back prints with the prompt:
 
@@ -384,7 +400,7 @@ nms-copilot --headless                           # stdio transport
 nms-copilot --headless --http 127.0.0.1:3000    # HTTP transport
 ```
 
-The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), and see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`).
+The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`), and answer "do I have gold and where is it" (`have_item`, `inventory_summary`, `list_ships`).
 
 ---
 

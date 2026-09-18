@@ -17,6 +17,10 @@ pub struct ModelCompletions {
     pub base_names: Vec<String>,
     /// Known system names (original casing).
     pub system_names: Vec<String>,
+    /// Display names of every item held, for `have`.
+    pub item_names: Vec<String>,
+    /// Container labels, for `inventory`.
+    pub container_names: Vec<String>,
 }
 
 /// REPL tab completer with static command knowledge and dynamic model data.
@@ -31,13 +35,47 @@ impl CopilotCompleter {
 }
 
 const COMMANDS: &[&str] = &[
-    "backup", "base", "convert", "dash", "exit", "find", "fleet", "help", "info", "list", "map",
-    "quit", "reset", "route", "set", "show", "stats", "status",
+    "backup",
+    "base",
+    "convert",
+    "dash",
+    "exit",
+    "find",
+    "fleet",
+    "have",
+    "help",
+    "info",
+    "inventory",
+    "list",
+    "map",
+    "quit",
+    "reset",
+    "route",
+    "set",
+    "show",
+    "stats",
+    "status",
 ];
 
 const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];
 
-const LIST_SUBCOMMANDS: &[&str] = &["bases", "biomes", "galaxies", "glyphs", "systems"];
+const LIST_SUBCOMMANDS: &[&str] = &[
+    "bases",
+    "biomes",
+    "exocraft",
+    "galaxies",
+    "glyphs",
+    "items",
+    "multitools",
+    "ships",
+    "systems",
+];
+
+const HAVE_FLAGS: &[&str] = &["--type"];
+
+const INVENTORY_FLAGS: &[&str] = &["--free"];
+
+const ITEM_TYPES: &[&str] = &["substance", "product", "technology"];
 
 const FIND_FLAGS: &[&str] = &[
     "--biome",
@@ -111,6 +149,40 @@ impl Completer for CopilotCompleter {
 
             ["fleet"] if trailing_space => ("", FLEET_SUBCOMMANDS.to_vec()),
             ["fleet", _] if !trailing_space => (words[1], FLEET_SUBCOMMANDS.to_vec()),
+
+            ["have", .., "--type"] if trailing_space => {
+                return self.filter_suggestions("", ITEM_TYPES, pos);
+            }
+            ["have", .., "--type", _] if !trailing_space => {
+                return self.filter_suggestions(words[words.len() - 1], ITEM_TYPES, pos);
+            }
+            ["have", ..] if !trailing_space && words.last().is_some_and(|w| w.starts_with('-')) => {
+                return self.filter_suggestions(words[words.len() - 1], HAVE_FLAGS, pos);
+            }
+            ["have"] if trailing_space => {
+                return self.complete_names("", &self.model_data.item_names, pos);
+            }
+            ["have", _] if !trailing_space => {
+                return self.complete_names(words[1], &self.model_data.item_names, pos);
+            }
+            ["have", _, ..] if trailing_space => {
+                return self.filter_suggestions("", HAVE_FLAGS, pos);
+            }
+
+            ["inventory", ..]
+                if !trailing_space && words.last().is_some_and(|w| w.starts_with('-')) =>
+            {
+                return self.filter_suggestions(words[words.len() - 1], INVENTORY_FLAGS, pos);
+            }
+            ["inventory"] if trailing_space => {
+                return self.complete_names("", &self.model_data.container_names, pos);
+            }
+            ["inventory", _] if !trailing_space => {
+                return self.complete_names(words[1], &self.model_data.container_names, pos);
+            }
+            ["inventory", _, ..] if trailing_space => {
+                return self.filter_suggestions("", INVENTORY_FLAGS, pos);
+            }
 
             ["backup"] if trailing_space => ("", BACKUP_SUBCOMMANDS.to_vec()),
             ["backup", _] if !trailing_space => (words[1], BACKUP_SUBCOMMANDS.to_vec()),
@@ -323,6 +395,8 @@ mod tests {
                 "Beta Station".into(),
             ],
             system_names: vec!["Gugestor Colony".into(), "Esurad".into()],
+            item_names: vec!["Gold".into(), "Gold Ore".into(), "Silver".into()],
+            container_names: vec!["Exosuit".into(), "Storage 1".into(), "Storage 10".into()],
         })
     }
 
@@ -524,6 +598,32 @@ mod tests {
         let results = c.complete("FIND --b", 8);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
         assert!(values.contains(&"--biome"));
+    }
+
+    #[test]
+    fn test_complete_have_offers_item_names_and_types() {
+        let mut c = test_completer();
+        let results = c.complete("have go", 7);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, vec!["Gold", "\"Gold Ore\""]);
+        let results = c.complete("have gold --type ", 17);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(values.contains(&"substance"));
+        assert!(values.contains(&"technology"));
+        let results = c.complete("have gold --", 12);
+        assert_eq!(results[0].value, "--type");
+    }
+
+    #[test]
+    fn test_complete_inventory_offers_container_labels() {
+        let mut c = test_completer();
+        let results = c.complete("inventory sto", 13);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, vec!["\"Storage 1\"", "\"Storage 10\""]);
+        let results = c.complete("inventory --", 12);
+        assert_eq!(results[0].value, "--free");
+        let results = c.complete("list it", 7);
+        assert_eq!(results[0].value, "items");
     }
 
     #[test]

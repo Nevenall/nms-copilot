@@ -25,4 +25,4 @@ The arcs share pieces that are built once. Two are done; the rest are arc 01's f
 
 ## Status
 
-Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool. Arc 03 is implemented (2026-09-15) as the `fleet` command, REPL alerts, and the `fleet_status` MCP tool; both plans record the verified decode rules. Arc 01 was drafted 2026-09-14 and revised 2026-09-15 against the code and a fresh read of the save; not started.
+Arc 02 is implemented (2026-09-14) as the `base` command, REPL alerts, and the `base_status` MCP tool. Arc 03 is implemented (2026-09-15) as the `fleet` command, REPL alerts, and the `fleet_status` MCP tool; both plans record the verified decode rules. Arc 01 is implemented (2026-09-15) as the `have` and `inventory` commands, the `list items | ships | exocraft | multitools` targets, the `have_item`, `inventory_summary`, and `list_ships` MCP tools, and the dashboard's inventory line; the item name table is generated from the AssistantNMS API.

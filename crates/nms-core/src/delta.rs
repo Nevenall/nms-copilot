@@ -5,6 +5,7 @@
 
 use crate::address::GalacticAddress;
 use crate::fleet::Fleet;
+use crate::holdings::Holdings;
 use crate::player::PlayerBase;
 use crate::system::{Planet, System, SystemId};
 
@@ -23,6 +24,8 @@ pub struct SaveDelta {
     pub modified_bases: Vec<PlayerBase>,
     /// The fleet when anything about it changed; it is small and changes on most saves, so it is replaced rather than diffed.
     pub fleet: Option<Fleet>,
+    /// The holdings when any grid, ship, exocraft, or multi-tool changed; replaced whole like the fleet.
+    pub holdings: Option<Holdings>,
 }
 
 /// Player position change.
@@ -42,6 +45,7 @@ impl SaveDelta {
             new_bases: Vec::new(),
             modified_bases: Vec::new(),
             fleet: None,
+            holdings: None,
         }
     }
 
@@ -53,6 +57,7 @@ impl SaveDelta {
             && self.new_bases.is_empty()
             && self.modified_bases.is_empty()
             && self.fleet.is_none()
+            && self.holdings.is_none()
     }
 
     /// Total number of individual changes.
@@ -63,6 +68,7 @@ impl SaveDelta {
             + self.new_bases.len()
             + self.modified_bases.len()
             + self.fleet.as_ref().map_or(0, |_| 1)
+            + self.holdings.as_ref().map_or(0, |_| 1)
     }
 }
 
@@ -119,7 +125,8 @@ mod tests {
                 launched_today: Vec::new(),
                 command_rooms: 1,
             }),
+            holdings: Some(Holdings::default()),
         };
-        assert_eq!(delta.change_count(), 6);
+        assert_eq!(delta.change_count(), 7);
     }
 }

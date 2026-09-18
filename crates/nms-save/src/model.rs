@@ -97,6 +97,93 @@ pub struct PlayerStateData {
     /// UTC day number, `floor(unix / 86400)`, of the current offer day.
     #[serde(default)]
     pub last_known_day: i64,
+
+    // Inventory grids. `Slots` lists occupied cells only and `ValidSlotIndices` the unlocked ones; see `docs/reference/nms-save-notes.md`, section 8.
+    /// Exosuit general.
+    #[serde(default)]
+    pub inventory: InventoryGrid,
+
+    /// Exosuit cargo (high-capacity); no slots unlocked until bought.
+    #[serde(rename = "Inventory_Cargo", default)]
+    pub inventory_cargo: InventoryGrid,
+
+    /// Exosuit technology.
+    #[serde(rename = "Inventory_TechOnly", default)]
+    pub inventory_tech_only: InventoryGrid,
+
+    #[serde(default)]
+    pub freighter_inventory: InventoryGrid,
+
+    #[serde(rename = "FreighterInventory_Cargo", default)]
+    pub freighter_inventory_cargo: InventoryGrid,
+
+    #[serde(rename = "FreighterInventory_TechOnly", default)]
+    pub freighter_inventory_tech_only: InventoryGrid,
+
+    // The ten storage containers, one shared grid per number.
+    #[serde(default)]
+    pub chest1_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest2_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest3_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest4_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest5_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest6_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest7_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest8_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest9_inventory: InventoryGrid,
+    #[serde(default)]
+    pub chest10_inventory: InventoryGrid,
+
+    /// Corvette parts.
+    #[serde(default)]
+    pub corvette_storage_inventory: InventoryGrid,
+
+    #[serde(default)]
+    pub cooking_ingredients_inventory: InventoryGrid,
+
+    #[serde(default)]
+    pub fish_bait_box_inventory: InventoryGrid,
+
+    #[serde(default)]
+    pub food_unit_inventory: InventoryGrid,
+
+    #[serde(default)]
+    pub rocket_locker_inventory: InventoryGrid,
+
+    #[serde(default)]
+    pub grave_inventory: InventoryGrid,
+
+    /// Every owned ship; entries with an empty `Resource.Filename` are unused slots.
+    #[serde(default)]
+    pub ship_ownership: Vec<ShipOwnership>,
+
+    /// Index of the active ship in `ship_ownership`.
+    #[serde(default)]
+    pub primary_ship: u32,
+
+    /// The exocraft, in a fixed order by kind; `Resource.Filename` is empty on every one.
+    #[serde(default)]
+    pub vehicle_ownership: Vec<VehicleOwnership>,
+
+    /// Every owned multi-tool; entries with an empty `Resource.Filename` are unused slots.
+    #[serde(default)]
+    pub multitools: Vec<Multitool>,
+
+    /// Index of the equipped multi-tool, spelt as the save spells it.
+    #[serde(rename = "ActiveMultioolIndex", default)]
+    pub active_multitool_index: u32,
+
+    /// Refiner buffers, one per placed refiner.
+    #[serde(default)]
+    pub refiner_buffer_data: Vec<RefinerBuffer>,
 }
 
 /// A teleporter destination recorded when the player docks at a station or visits a base.
@@ -763,6 +850,198 @@ pub struct AlienRaceWrapper {
 pub struct InventoryClassWrapper {
     #[serde(rename = "InventoryClass", default)]
     pub value: String,
+}
+
+/// One inventory grid: a shape, the unlocked cells, and the occupied slots.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct InventoryGrid {
+    #[serde(default)]
+    pub width: u32,
+
+    #[serde(default)]
+    pub height: u32,
+
+    #[serde(default)]
+    pub class: InventoryClassWrapper,
+
+    /// Occupied cells only.
+    #[serde(default)]
+    pub slots: Vec<InventorySlot>,
+
+    /// Unlocked cells; the grid's capacity.
+    #[serde(default)]
+    pub valid_slot_indices: Vec<SlotIndex>,
+
+    /// Supercharged cells.
+    #[serde(default)]
+    pub special_slots: Vec<SlotIndex>,
+
+    /// Class bonuses on ship and multi-tool grids (`^SHIP_DAMAGE`, `^WEAPON_MINING`, ...).
+    #[serde(default)]
+    pub base_stat_values: Vec<BaseStatValue>,
+}
+
+impl InventoryGrid {
+    /// A percentage bonus by its `BaseStatID`, 0 when absent.
+    pub fn stat(&self, id: &str) -> f32 {
+        self.base_stat_values
+            .iter()
+            .find(|s| s.base_stat_id == id)
+            .map(|s| s.value as f32)
+            .unwrap_or(0.0)
+    }
+
+    /// How many slots hold an installed technology.
+    pub fn tech_count(&self) -> usize {
+        self.slots
+            .iter()
+            .filter(|s| s.slot_type.value == "Technology")
+            .count()
+    }
+}
+
+/// One occupied cell.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct InventorySlot {
+    #[serde(default)]
+    pub id: String,
+
+    /// A count, or charge for technology. The game has written negative values.
+    #[serde(default)]
+    pub amount: i64,
+
+    #[serde(default)]
+    pub max_amount: i64,
+
+    #[serde(default)]
+    pub index: SlotIndex,
+
+    #[serde(rename = "Type", default)]
+    pub slot_type: InventoryTypeWrapper,
+}
+
+/// A cell position.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct SlotIndex {
+    #[serde(default)]
+    pub x: i32,
+    #[serde(default)]
+    pub y: i32,
+}
+
+/// One class bonus on a grid.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct BaseStatValue {
+    #[serde(rename = "BaseStatID", default)]
+    pub base_stat_id: String,
+    #[serde(default)]
+    pub value: f64,
+}
+
+/// Wrapper for `{"InventoryType": "Substance"}`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct InventoryTypeWrapper {
+    #[serde(rename = "InventoryType", default)]
+    pub value: String,
+}
+
+/// The scene file that gives a ship or tool its model; empty on an unused slot and on every exocraft.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct ResourceRef {
+    #[serde(default)]
+    pub filename: String,
+}
+
+/// One owned ship.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct ShipOwnership {
+    #[serde(default)]
+    pub name: String,
+
+    #[serde(default)]
+    pub resource: ResourceRef,
+
+    #[serde(default)]
+    pub inventory: InventoryGrid,
+
+    #[serde(rename = "Inventory_Cargo", default)]
+    pub inventory_cargo: InventoryGrid,
+
+    #[serde(rename = "Inventory_TechOnly", default)]
+    pub inventory_tech_only: InventoryGrid,
+
+    /// Reads 0 on every ship seen so far; meaning open.
+    #[serde(default)]
+    pub location: HexU64,
+}
+
+impl ShipOwnership {
+    /// Whether the slot holds a ship.
+    pub fn is_real(&self) -> bool {
+        !self.resource.filename.is_empty()
+    }
+}
+
+/// One exocraft. Same shape as a ship; `Location` is the address of the base it is parked at, 0 if never summoned.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct VehicleOwnership {
+    #[serde(default)]
+    pub name: String,
+
+    #[serde(default)]
+    pub inventory: InventoryGrid,
+
+    #[serde(rename = "Inventory_TechOnly", default)]
+    pub inventory_tech_only: InventoryGrid,
+
+    #[serde(default)]
+    pub location: HexU64,
+}
+
+/// One owned multi-tool.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct Multitool {
+    #[serde(default)]
+    pub name: String,
+
+    #[serde(default)]
+    pub resource: ResourceRef,
+
+    /// The tool's grid.
+    #[serde(default)]
+    pub store: InventoryGrid,
+}
+
+impl Multitool {
+    pub fn is_real(&self) -> bool {
+        !self.resource.filename.is_empty()
+    }
+}
+
+/// One refiner's buffer.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[non_exhaustive]
+pub struct RefinerBuffer {
+    #[serde(default)]
+    pub inventory_container: InventoryGrid,
 }
 
 /// Wrapper for `{"PersistentBaseTypes": "HomePlanetBase"}`.

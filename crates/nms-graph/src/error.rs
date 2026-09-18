@@ -14,4 +14,10 @@ pub enum GraphError {
 
     #[error("no fleet data in this save")]
     NoFleet,
+
+    #[error("no inventory data in this save")]
+    NoHoldings,
+
+    #[error("no container matches \"{0}\"")]
+    ContainerNotFound(String),
 }

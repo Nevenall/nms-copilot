@@ -7,6 +7,7 @@ pub mod base;
 pub mod display;
 pub mod find;
 pub mod fleet;
+pub mod inventory;
 pub mod layout;
 pub mod route;
 pub mod show;
@@ -24,9 +25,17 @@ pub use display::{
     format_fleet, format_fleet_overview, format_frigates, format_navigator_line, format_route,
     format_show_result, format_snapshot, format_stats, hex_to_emoji,
 };
+pub use display::{
+    format_exocraft, format_have, format_inventory, format_items, format_multitools, format_ships,
+};
 pub use find::{FindQuery, FindResult, ReferencePoint};
 pub use fleet::{
     ExpeditionRow, FleetStatus, FleetTarget, FrigateRow, OfferStatus, execute_fleet, fleet_alerts,
+};
+pub use inventory::{
+    ExocraftRow, HaveLocation, HaveQuery, HaveResult, InventoryQuery, InventoryResult, ItemTotal,
+    ListItemsQuery, execute_exocraft, execute_have, execute_inventory, execute_list_items,
+    holdings_summary,
 };
 pub use layout::terminal_width;
 pub use route::{RouteFrom, RouteQuery, RouteResult, TargetSelection};

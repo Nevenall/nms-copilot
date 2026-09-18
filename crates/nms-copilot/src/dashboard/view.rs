@@ -12,6 +12,7 @@ use nms_query::display::{
     format_duration_coarse, power_cell, thousands,
 };
 use nms_query::fleet::{ExpeditionRow, FleetStatus, execute_fleet};
+use nms_query::inventory::holdings_summary;
 
 use crate::session::{PositionContext, SessionState};
 use crate::watch::system_name_near;
@@ -205,12 +206,39 @@ fn player_panel(model: &GalaxyModel) -> PlayerPanel {
             ),
             ("Warped from".to_string(), from),
             known,
+            bases,
             ("Units".to_string(), thousands(state.units)),
             ("Nanites".to_string(), thousands(state.nanites)),
             ("Quicksilver".to_string(), thousands(state.quicksilver)),
+            (
+                "Inventory".to_string(),
+                model
+                    .holdings
+                    .as_ref()
+                    .map(holdings_summary)
+                    .unwrap_or_else(|| "-".to_string()),
+            ),
+            ("Ships".to_string(), ships_fact(model)),
             ("Freighter".to_string(), freighter),
-            bases,
         ],
+    }
+}
+
+/// How many ships the player owns and which one they are flying: `10 · Starbird (Exotic S)`.
+fn ships_fact(model: &GalaxyModel) -> String {
+    let Some(holdings) = model.holdings.as_ref() else {
+        return "-".to_string();
+    };
+    match holdings.primary_ship() {
+        Some(ship) => format!(
+            "{} \u{00B7} {} ({} {})",
+            holdings.ships.len(),
+            ship.label(),
+            ship.type_label(),
+            ship.class_label()
+        ),
+        None if holdings.ships.is_empty() => "-".to_string(),
+        None => holdings.ships.len().to_string(),
     }
 }
 
@@ -467,13 +495,19 @@ mod tests {
             "the fixture records no previous system"
         );
         assert_eq!(of("Freighter"), "-", "and no freighter");
+        assert_eq!(
+            of("Inventory"),
+            "Exosuit 4/93",
+            "occupied of unlocked, and no storage container is full"
+        );
+        assert_eq!(of("Ships"), "2 \u{00B7} Starbird (Exotic S)");
         assert_eq!(of("Bases"), "3");
         assert!(of("Known").ends_with("planets"), "{}", of("Known"));
         assert!(of("From centre").ends_with("ly"), "{}", of("From centre"));
         assert_eq!(of("Address").len(), 12, "a portal address is twelve digits");
 
-        // Ten facts make five lines, and the first of each half share the top one.
-        assert_eq!(view.player.rows(), 5);
+        // Twelve facts make six lines: where the player is on the left, what they hold on the right.
+        assert_eq!(view.player.rows(), 6);
         let (left, right) = view.player.line(0);
         assert_eq!(left.map(|f| f.0.as_str()), Some("System"));
         assert_eq!(right.map(|f| f.0.as_str()), Some("Units"));

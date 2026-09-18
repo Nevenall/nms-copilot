@@ -31,8 +31,8 @@ const FILE_STABILITY_CHECK_MS: u64 = 100;
 pub enum WatchEvent {
     /// A save file in the watched folder finished being written, whatever its slot. Drives backups.
     SaveWritten(SaveFile),
-    /// The followed slot changed: the file just written was re-parsed and diffed against the last state seen.
-    Delta(SaveDelta),
+    /// The followed slot changed: the file just written was re-parsed and diffed against the last state seen. Boxed: a delta carries whole holdings and fleet replacements.
+    Delta(Box<SaveDelta>),
 }
 
 /// Handle to a running file watcher.
@@ -217,7 +217,9 @@ pub fn start_watching(config: WatchConfig) -> Result<WatchHandle, WatchError> {
                         consecutive_failures = 0;
                         let delta = compute_delta(&snapshot, &new_snapshot);
 
-                        if !delta.is_empty() && event_tx.send(WatchEvent::Delta(delta)).is_err() {
+                        if !delta.is_empty()
+                            && event_tx.send(WatchEvent::Delta(Box::new(delta))).is_err()
+                        {
                             return;
                         }
 
