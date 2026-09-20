@@ -10,7 +10,7 @@ NMS Copilot is a real-time galactic copilot for No Man's Sky, built in Rust. It 
 
 ## Document Hierarchy
 
-For Rust code quality (once code exists):
+For Rust code quality:
 
 1. `/collaboration-framework` — Session discipline, project management, verification, and closure guidance
 2. `/rust-guidelines` — Advanced Rust programming guidance and anti-patterns
@@ -21,13 +21,12 @@ repository.
 
 ## Design Documents
 
-Managed via ODM (`./bin/odm`). Key docs:
+Plans live under `docs/plans/`, one numbered document per feature, each opening with a **Status** line that says when and on which branch it was implemented and how the result departs from the design. Each project directory has a `README.md` index with the status of its arcs:
 
-- `./bin/odm show 1` — Known resources for parsing NMS save files (Final)
-- `./bin/odm show 2` — Detailed project plan with crate specs, dependency graph, and all 7 phases (Active)
-- `./bin/odm show 3` — Project summary with milestone tables per phase (Active)
+- `docs/plans/project02-inventory-and-bases/` — inventory (0044), crops and supply depots (0045), fleet expeditions (0046); all implemented.
+- `docs/plans/project03-save-tooling/` — save backups (0047), dashboard (0048), generated galaxy names and properties (0049); all implemented.
 
-Doc paths: `crates/design/docs/` (finalized) and `crates/design/dev/` (working notes).
+A new feature gets the next number and a plan before the code; when the code lands, the plan's Status line is updated rather than the plan rewritten. Facts the plans rest on live in `docs/reference/` (see below); `docs/mcp-http.md` documents the MCP HTTP transport. The upstream project's ODM design documents (`crates/design/`) were never part of this fork's tree.
 
 ## Crate Architecture
 
@@ -50,8 +49,6 @@ Data flow: `save file → parser → galaxy model → query engine → CLI / REP
 **nms-graph is the core.** Everything upstream feeds into it; everything downstream queries from it. All three interfaces share `nms-query` — no duplicated logic.
 
 ## Build & Test Commands
-
-Once the workspace exists:
 
 ```bash
 make build          # Build all crates

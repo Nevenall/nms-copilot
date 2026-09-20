@@ -52,6 +52,12 @@ Use `--headless` to run just the MCP server without the REPL (e.g., for Claude D
 - **Live file watching** -- detects auto-saves while you play and updates the model in real time
 - **rkyv cache** -- zero-copy serialization for near-instant startup after the first load
 - **Inventory** -- do I have gold, how much, and where: every container, ship, exocraft, and multi-tool, with item names from the game's data
+- **Base status** -- crops ready to harvest, supply depots and their pipe networks, power at every base, with alerts when something is ready or full
+- **Fleet** -- frigate expeditions under way, returned, or waiting for your decision; every frigate's class, grade, and modules
+- **Region names and system properties** -- region, generated system name, star colour, economy, wealth, conflict, and lifeform for any address, via the community `nms_namegen` tool
+- **Dashboard** -- a live terminal view of you, your bases, and your fleet for a second monitor, redrawn as the game saves
+- **Save backups** -- dated snapshots of a slot's two files, on demand or on every save the game writes; restore is a two-file copy
+- **Raw save inspection** -- print any part of the decoded save as JSON
 - **Multi-save support** -- switch between save slots (up to 15)
 - **Export & import** -- JSON/CSV export of filtered data; CSV import of community coordinates
 - **MCP server** -- stdio and HTTP transports for AI copilot integration (Claude Desktop, etc.)
@@ -297,7 +303,7 @@ nms-copilot
   (opens full-screen interactive galaxy map with zoom levels)
 ```
 
-REPL-only commands:
+Commands at the prompt beyond the CLI's, and the CLI commands that gain completion or alerts there:
 
 | Command | Description |
 |---------|-------------|
@@ -306,6 +312,7 @@ REPL-only commands:
 | `set warp-range <ly>` | Set default warp range for route planning |
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
 | `status` | Show current session state and base and fleet alerts |
+| `base [name] [--width N]` | Every base's crops, extraction, and power, or one base in full |
 | `fleet [N\|frigates]` | Frigate expeditions, one expedition in full, or every frigate |
 | `have <item> [--type T]` | Do I have it, how much, and where; completes item names |
 | `inventory [container] [--free]` | Every container and how full it is, or one container's contents |
@@ -422,7 +429,7 @@ nms-copilot --headless                           # stdio transport
 nms-copilot --headless --http 127.0.0.1:3000    # HTTP transport
 ```
 
-The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`), and answer "do I have gold and where is it" (`have_item`, `inventory_summary`, `list_ships`).
+The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`), and answer "do I have gold and where is it" (`have_item`, `inventory_summary`, `list_ships`). `show_system` carries the region, the generated name, and the hover properties when the `nms_namegen` tool is installed.
 
 ---
 
