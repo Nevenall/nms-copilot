@@ -34,7 +34,7 @@ impl RawDiscoveryRecord {
 
         Some(nms_core::DiscoveryRecord::new(
             discovery_type,
-            self.dd.ua.to_galactic_address(0),
+            self.dd.ua.to_galactic_address_in_save_galaxy(),
             timestamp,
             self.dm.name(),
             discoverer,
@@ -56,7 +56,7 @@ impl PersistentPlayerBase {
         nms_core::PlayerBase::new(
             self.name.clone(),
             base_type,
-            self.galactic_address.to_galactic_address(0),
+            self.galactic_address.to_galactic_address_in_save_galaxy(),
             self.position,
             if self.owner.uid.is_empty() {
                 None

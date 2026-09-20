@@ -149,6 +149,7 @@ pub enum ShipType {
     Solar,
     Exotic,
     Living,
+    Interceptor,
 }
 
 impl ShipType {
@@ -163,6 +164,7 @@ impl ShipType {
             "SAILSHIP" => Some(Self::Solar),
             "S-CLASS" => Some(Self::Exotic),
             "BIGGS" => Some(Self::Living),
+            "SENTINELSHIP" => Some(Self::Interceptor),
             _ => None,
         }
     }
@@ -175,6 +177,7 @@ impl ShipType {
             Self::Solar => "Solar",
             Self::Exotic => "Exotic",
             Self::Living => "Living ship",
+            Self::Interceptor => "Interceptor",
         }
     }
 }
@@ -603,6 +606,12 @@ mod tests {
         assert_eq!(
             ShipType::from_filename("MODELS/COMMON/SPACECRAFT/S-CLASS/S-CLASS_PROC.SCENE.MBIN"),
             Some(ShipType::Exotic)
+        );
+        assert_eq!(
+            ShipType::from_filename(
+                "MODELS/COMMON/SPACECRAFT/SENTINELSHIP/SENTINELSHIP_PROC.SCENE.MBIN"
+            ),
+            Some(ShipType::Interceptor)
         );
         assert_eq!(ShipType::from_filename(""), None);
         assert_eq!(ShipType::from_filename("FIGHTER.MBIN"), None);

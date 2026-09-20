@@ -453,9 +453,19 @@ impl PackedGalacticAddress {
     /// The save-file layout places the solar system index and planet index in
     /// different bit positions from the portal-glyph layout; see
     /// [`GalacticAddress::from_save_ua`](nms_core::GalacticAddress::from_save_ua).
-    /// The galaxy is not encoded in the value and must be supplied.
+    /// The caller's galaxy overrides the one written in the value.
     pub fn to_galactic_address(&self, reality_index: u8) -> nms_core::GalacticAddress {
         nms_core::GalacticAddress::from_save_ua(self.0, reality_index)
+    }
+
+    /// Convert to the core `GalacticAddress` type, taking the galaxy from bits 32-39 of the value.
+    pub fn to_galactic_address_in_save_galaxy(&self) -> nms_core::GalacticAddress {
+        nms_core::GalacticAddress::from_save_ua_in_save_galaxy(self.0)
+    }
+
+    /// The galaxy written in bits 32-39 of the value.
+    pub fn reality_index(&self) -> u8 {
+        nms_core::GalacticAddress::save_ua_galaxy(self.0)
     }
 }
 

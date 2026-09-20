@@ -6,18 +6,22 @@ use crate::biome::{Biome, BiomeSubType};
 
 /// Unique identifier for a star system.
 ///
-/// The value is the packed 48-bit galactic address with planet index zeroed out
-/// (i.e., bits 47-44 cleared). Two systems at the same voxel coordinates but
-/// different SSI values get different IDs.
+/// The low 48 bits are the packed galactic address with the planet index zeroed
+/// out (bits 47-44 cleared); bits 55-48 are the galaxy. Two systems at the same
+/// voxel coordinates but different SSI values, or the same address in two
+/// galaxies, get different IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SystemId(pub u64);
 
 impl SystemId {
-    /// Create from a `GalacticAddress` by zeroing the planet index bits.
+    /// Create from a `GalacticAddress` by zeroing the planet index bits and adding the galaxy.
     pub fn from_address(addr: &GalacticAddress) -> Self {
-        // Clear the top 4 bits (planet index) of the 48-bit packed value
-        let packed = addr.packed() & 0x0FFF_FFFF_FFFF;
-        SystemId(packed)
+        Self::new(addr.packed(), addr.reality_index)
+    }
+
+    /// Create from a packed 48-bit address (planet bits are ignored) and a galaxy.
+    pub fn new(packed: u64, reality_index: u8) -> Self {
+        SystemId((packed & 0x0FFF_FFFF_FFFF) | ((reality_index as u64) << 48))
     }
 }
 

@@ -25,6 +25,26 @@ struct SystemBuilder {
 /// are placeholders and are ignored.
 const NMS_RELEASE_TS: i64 = 1_470_700_800;
 
+/// The galaxy a discovery record belongs to.
+///
+/// Bits 32-39 of `DD.UA` hold the galaxy on every record with a real timestamp. The
+/// duplicate `SolarSystem` records that carry a pre-release timestamp hold another value
+/// there, so for those the galaxy comes from the system's real record when one exists
+/// (`real_galaxies`, keyed by the address without its galaxy bits).
+fn record_galaxy(
+    rec: &nms_save::model::RawDiscoveryRecord,
+    real_galaxies: &HashMap<u64, u8>,
+) -> u8 {
+    if rec.ows.ts as i64 >= NMS_RELEASE_TS {
+        return rec.dd.ua.reality_index();
+    }
+    let key = SystemId::new(rec.dd.ua.to_galactic_address(0).packed(), 0).0;
+    real_galaxies
+        .get(&key)
+        .copied()
+        .unwrap_or_else(|| rec.dd.ua.reality_index())
+}
+
 /// Extract biome and infested flag from a discovery record's VP array.
 ///
 /// VP array format (for Planet discovery type):
@@ -111,12 +131,26 @@ pub fn extract_systems(save: &SaveRoot) -> HashMap<SystemId, System> {
     let records = &save.discovery_manager_data.discovery_data_v1.store.record;
     let mut builders: HashMap<SystemId, SystemBuilder> = HashMap::new();
 
+    // The galaxy of each system that has a record with a real timestamp, for the
+    // duplicate records that do not (see `record_galaxy`).
+    let real_galaxies: HashMap<u64, u8> = records
+        .iter()
+        .filter(|rec| rec.dd.dt == "SolarSystem" && rec.ows.ts as i64 >= NMS_RELEASE_TS)
+        .map(|rec| {
+            let key = SystemId::new(rec.dd.ua.to_galactic_address(0).packed(), 0).0;
+            (key, rec.dd.ua.reality_index())
+        })
+        .collect();
+
     // First pass: collect SolarSystem discoveries (for system names/discoverers)
     for rec in records {
         if rec.dd.dt != "SolarSystem" {
             continue;
         }
-        let addr = rec.dd.ua.to_galactic_address(0);
+        let addr = rec
+            .dd
+            .ua
+            .to_galactic_address(record_galaxy(rec, &real_galaxies));
         let sys_id = SystemId::from_address(&addr);
 
         let timestamp = if rec.ows.ts as i64 >= NMS_RELEASE_TS {
@@ -168,7 +202,10 @@ pub fn extract_systems(save: &SaveRoot) -> HashMap<SystemId, System> {
         if rec.dd.dt != "Planet" {
             continue;
         }
-        let addr = rec.dd.ua.to_galactic_address(0);
+        let addr = rec
+            .dd
+            .ua
+            .to_galactic_address(record_galaxy(rec, &real_galaxies));
         let sys_id = SystemId::from_address(&addr);
         let planet_index = addr.planet_index();
 

@@ -49,7 +49,7 @@ pub fn extract_cache_data(model: &GalaxyModel, save_version: u32) -> CacheData {
 const CACHE_MAGIC: &[u8; 4] = b"NMSC";
 
 /// Version of the archived data. Bump whenever an archived type changes shape, or whenever a decoding rule that feeds archived data changes (base objects are stored decoded), so caches written by an older binary are rebuilt instead of trusted.
-pub const CACHE_FORMAT_VERSION: u32 = 6;
+pub const CACHE_FORMAT_VERSION: u32 = 7;
 
 const HEADER_LEN: usize = CACHE_MAGIC.len() + 4;
 

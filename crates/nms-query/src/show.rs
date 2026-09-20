@@ -60,17 +60,27 @@ fn show_system(model: &GalaxyModel, name_or_id: &str) -> Result<ShowResult, Grap
             .unwrap_or(name_or_id);
         let packed = u64::from_str_radix(hex, 16)
             .map_err(|_| GraphError::SystemNotFound(name_or_id.to_string()))?;
-        let id = SystemId(packed & 0x0FFF_FFFF_FFFF);
-        model
-            .system(&id)
+        // A bare portal address names no galaxy: try the player's, then every other
+        // galaxy the model knows.
+        let mut galaxies: Vec<u8> = model
+            .player_position()
+            .map(|p| p.reality_index)
+            .into_iter()
+            .collect();
+        galaxies.extend(model.discovered_galaxies());
+        galaxies
+            .into_iter()
+            .find_map(|galaxy| model.system(&SystemId::new(packed, galaxy)))
             .ok_or_else(|| GraphError::SystemNotFound(name_or_id.to_string()))?
     };
 
     let portal_hex = format!("{:012X}", system.address.packed());
     let galaxy = nms_core::galaxy::Galaxy::by_index(system.address.reality_index);
 
+    // A distance across galaxies means nothing, so leave it out.
     let distance_from_player = model
         .player_position()
+        .filter(|pos| pos.reality_index == system.address.reality_index)
         .map(|pos| pos.distance_ly(&system.address));
 
     Ok(ShowResult::System(ShowSystemResult {

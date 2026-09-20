@@ -35,6 +35,7 @@ pub const CROSS_VOXEL_SD: f64 = 0.408_248 * LY_PER_VOXEL;
 const PACKED_MASK: u64 = 0xFFFF_FFFF_FFFF;
 
 // Bit-field shifts within the 64-bit save-file universe address (UA).
+const UA_GALAXY_SHIFT: u32 = 32;
 const UA_SSI_SHIFT: u32 = 40;
 const UA_PLANET_SHIFT: u32 = 52;
 
@@ -135,7 +136,7 @@ impl GalacticAddress {
     /// | 0-11  | VoxelX (12-bit signed)        |
     /// | 12-23 | VoxelZ (12-bit signed)        |
     /// | 24-31 | VoxelY (8-bit signed)         |
-    /// | 32-39 | Flag of unknown meaning       |
+    /// | 32-39 | RealityIndex (galaxy)         |
     /// | 40-51 | SolarSystemIndex (12-bit)     |
     /// | 52-55 | PlanetIndex (4-bit)           |
     ///
@@ -143,9 +144,11 @@ impl GalacticAddress {
     /// form: a discovery record with `UA = 0x2E00FC956DEC` is the system at voxel
     /// (-532, -4, -1706) with solar system index 46, not index 0xE00 / planet 2.
     ///
-    /// Bits 32-39 are observed as both 0 and 1 for records of the same Euclid system in a
-    /// save that never left Euclid, so they do not encode the galaxy and are ignored.
-    /// The galaxy is not part of the value; callers supply `reality_index`.
+    /// Bits 32-39 hold the galaxy on every discovery record with a real timestamp
+    /// (see `docs/reference/nms-save-notes.md`, section 5); the duplicate records with
+    /// a pre-release timestamp carry another value there, so callers that know the
+    /// galaxy pass it and this function ignores the bits. Use
+    /// [`from_save_ua_in_save_galaxy`](Self::from_save_ua_in_save_galaxy) to read it.
     pub fn from_save_ua(ua: u64, reality_index: u8) -> Self {
         let x = sign_extend_12((ua & MASK_12BIT) as u16);
         let z = sign_extend_12(((ua >> VOXEL_Z_SHIFT) & MASK_12BIT) as u16);
@@ -155,12 +158,21 @@ impl GalacticAddress {
         Self::new(x, y, z, ssi, planet, reality_index)
     }
 
+    /// The galaxy written in bits 32-39 of a save-file universe address.
+    pub fn save_ua_galaxy(ua: u64) -> u8 {
+        ((ua >> UA_GALAXY_SHIFT) & MASK_8BIT) as u8
+    }
+
+    /// Decode a save-file universe address, taking the galaxy from its own bits 32-39.
+    pub fn from_save_ua_in_save_galaxy(ua: u64) -> Self {
+        Self::from_save_ua(ua, Self::save_ua_galaxy(ua))
+    }
+
     /// Encode this address in the save-file universe address layout (see [`from_save_ua`](Self::from_save_ua)).
-    ///
-    /// Bits 32-39 are written as zero; the galaxy is not part of the value.
     pub fn to_save_ua(&self) -> u64 {
         let low = self.packed & 0xFFFF_FFFF; // X, Z, Y are laid out identically in both formats
-        low | ((self.solar_system_index() as u64) << UA_SSI_SHIFT)
+        low | ((self.reality_index as u64) << UA_GALAXY_SHIFT)
+            | ((self.solar_system_index() as u64) << UA_SSI_SHIFT)
             | ((self.planet_index() as u64) << UA_PLANET_SHIFT)
     }
 
@@ -1038,15 +1050,21 @@ mod tests {
     fn save_ua_roundtrip() {
         let addr = GalacticAddress::new(-527, -50, 1234, 0xABC, 7, 3);
         let ua = addr.to_save_ua();
-        assert_eq!((ua >> 32) & 0xFF, 0, "unknown flag byte is written as zero");
+        assert_eq!((ua >> 32) & 0xFF, 3, "the galaxy is written in bits 32-39");
         assert_eq!((ua >> 40) & 0xFFF, 0xABC);
         assert_eq!((ua >> 52) & 0xF, 7);
         assert_eq!(GalacticAddress::from_save_ua(ua, 3), addr);
+        assert_eq!(GalacticAddress::from_save_ua_in_save_galaxy(ua), addr);
 
-        // The flag byte in real records (0 or 1) must not affect decoding.
-        let flagged = GalacticAddress::from_save_ua(0x00022801FC957DEB, 0);
-        let plain = GalacticAddress::from_save_ua(0x00022800FC957DEB, 0);
-        assert_eq!(flagged, plain);
+        // A caller that knows the galaxy overrides the bits; the reader takes them.
+        let hilbert = GalacticAddress::from_save_ua(0x00022801FC957DEB, 0);
+        let euclid = GalacticAddress::from_save_ua(0x00022800FC957DEB, 0);
+        assert_eq!(hilbert, euclid);
+        assert_eq!(GalacticAddress::save_ua_galaxy(0x00022801FC957DEB), 1);
+        assert_eq!(
+            GalacticAddress::from_save_ua_in_save_galaxy(0x00022801FC957DEB).reality_index,
+            1
+        );
 
         assert_eq!(
             GalacticAddress::from_save_ua(0x40050003AB8C07, 0).to_save_ua(),
