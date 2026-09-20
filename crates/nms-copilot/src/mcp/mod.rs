@@ -427,8 +427,8 @@ fn build_guidance() -> ServerGuidance {
         )
         .subscribe(BASES_URI, "Know when new bases are built or modified")
         .workflow("Subscribe to recommended resources for live updates")
-        .workflow("Call where_am_i to establish the player's current location")
-        .workflow("Use search_planets or whats_nearby to find destinations")
+        .workflow("Call player_position to establish the player's current location")
+        .workflow("Use find_planets or nearby_planets to find destinations")
         .workflow("Use plan_route to plan navigation between targets")
         .workflow("Use convert_coordinates to provide portal glyphs for in-game use")
         .convention("Distances are in light-years")
@@ -436,9 +436,9 @@ fn build_guidance() -> ServerGuidance {
         .convention("System and planet names may be unnamed (shown as \"-\")")
         .tool_metas(vec![
             (
-                "search_planets",
+                "find_planets",
                 ToolMeta {
-                    summary: "Search planets by biome, distance, discoverer, or name.".into(),
+                    summary: "Find planets by biome, distance, discoverer, or name.".into(),
                     when_to_use: "Looking for planets with a specific biome or property".into(),
                     returns: "Ranked list of matching planets with coordinates and \
                               portal glyphs"
@@ -462,25 +462,23 @@ fn build_guidance() -> ServerGuidance {
                 },
             ),
             (
-                "where_am_i",
+                "player_position",
                 ToolMeta {
-                    summary: "Get the player's current location.".into(),
+                    summary: "The player's current location.".into(),
                     when_to_use: "Need to know the player's current system and coordinates".into(),
                     returns: "System name, coordinates, portal glyphs, galaxy".into(),
-                    next: Some("Call whats_nearby for situational awareness".into()),
+                    next: Some("Call nearby_planets for situational awareness".into()),
                     category: Some("location".into()),
                 },
             ),
             (
-                "whats_nearby",
+                "nearby_planets",
                 ToolMeta {
-                    summary: "Find systems and planets near the player's current \
-                              position."
-                        .into(),
+                    summary: "The planets nearest the player's current position.".into(),
                     when_to_use: "Need situational awareness or looking for nearby options".into(),
-                    returns: "Nearby systems with distances, biomes, and portal glyphs".into(),
+                    returns: "Nearby planets with distances, biomes, and portal glyphs".into(),
                     next: Some(
-                        "Call search_planets for filtered results or plan_route to \
+                        "Call find_planets for filtered results or plan_route to \
                          navigate"
                             .into(),
                     ),
@@ -502,12 +500,12 @@ fn build_guidance() -> ServerGuidance {
                 },
             ),
             (
-                "show_base",
+                "base_status",
                 ToolMeta {
-                    summary: "Get detailed information about a player base.".into(),
-                    when_to_use: "Need details about a specific base (location, type, system)"
+                    summary: "The player's bases: location, crops, supply depots, and power.".into(),
+                    when_to_use: "Need a base's location or glyphs, or what is ready and what is full at the bases"
                         .into(),
-                    returns: "Base details with portal glyphs and system context".into(),
+                    returns: "One record per base with portal glyphs, system, crops, extraction networks, power, and the current alerts".into(),
                     next: None,
                     category: Some("detail".into()),
                 },
@@ -533,7 +531,7 @@ fn build_guidance() -> ServerGuidance {
                                   or progress"
                         .into(),
                     returns: "System/planet/base counts with biome breakdown".into(),
-                    next: Some("Call search_planets to explore specific biomes".into()),
+                    next: Some("Call find_planets to explore specific biomes".into()),
                     category: Some("overview".into()),
                 },
             ),

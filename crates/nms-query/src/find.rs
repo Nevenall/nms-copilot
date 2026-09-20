@@ -19,6 +19,45 @@ pub enum ReferencePoint {
     Address(GalacticAddress),
 }
 
+/// What orders the results.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FindSort {
+    /// Nearest first.
+    #[default]
+    Distance,
+    /// Most species recorded first, then nearest.
+    Fauna,
+    /// Most plants recorded first, then nearest.
+    Flora,
+    /// Most minerals recorded first, then nearest.
+    Minerals,
+}
+
+impl FindSort {
+    /// Parse the `--sort` word.
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "distance" | "nearest" => Ok(Self::Distance),
+            "fauna" | "animals" | "creatures" => Ok(Self::Fauna),
+            "flora" | "plants" => Ok(Self::Flora),
+            "minerals" | "mineral" => Ok(Self::Minerals),
+            other => Err(format!(
+                "unknown sort: {other} (expected distance, fauna, flora, or minerals)"
+            )),
+        }
+    }
+
+    /// The scanned count this sort orders by, if it is a scanned sort.
+    fn scanned_count(self, planet: &Planet) -> Option<u16> {
+        match self {
+            Self::Distance => None,
+            Self::Fauna => Some(planet.scanned.fauna),
+            Self::Flora => Some(planet.scanned.flora),
+            Self::Minerals => Some(planet.scanned.minerals),
+        }
+    }
+}
+
 /// Parameters for a planet/system search.
 #[derive(Debug, Clone, Default)]
 pub struct FindQuery {
@@ -40,6 +79,8 @@ pub struct FindQuery {
     pub named_only: bool,
     /// Reference point for distance calculations.
     pub from: ReferencePoint,
+    /// What orders the results; with a scanned sort, `nearest` is a plain limit over the sorted list.
+    pub sort: FindSort,
 }
 
 /// A single result from a find query.
@@ -64,7 +105,7 @@ pub struct FindResult {
 
 /// Execute a find query against the galaxy model.
 ///
-/// Returns results sorted by distance ascending.
+/// Returns results in the query's order: nearest first, or most recorded first for a scanned sort.
 pub fn execute_find(model: &GalaxyModel, query: &FindQuery) -> Result<Vec<FindResult>, GraphError> {
     // Resolve the reference point
     let from = match &query.from {
@@ -86,8 +127,9 @@ pub fn execute_find(model: &GalaxyModel, query: &FindQuery) -> Result<Vec<FindRe
         named_only: query.named_only,
     };
 
-    // Choose between nearest-N or within-radius
-    let planet_matches = if let Some(n) = query.nearest {
+    // Choose between nearest-N or within-radius. A scanned sort must see every candidate
+    // before it limits, so `nearest` is applied after sorting in that case.
+    let planet_matches = if let (Some(n), FindSort::Distance) = (query.nearest, query.sort) {
         model.nearest_planets(&from, n * 2, &biome_filter) // over-fetch for post-filtering
     } else if let Some(radius) = query.within_ly {
         model.planets_within_radius(&from, radius, &biome_filter)
@@ -183,11 +225,17 @@ pub fn execute_find(model: &GalaxyModel, query: &FindQuery) -> Result<Vec<FindRe
         .collect();
 
     // Sort by distance, keeping each system's planets contiguous and in index order
-    // so the display can group them.
+    // so the display can group them; a scanned sort puts the most recorded first.
     results.sort_by(|a, b| {
-        a.distance_ly
-            .partial_cmp(&b.distance_ly)
-            .unwrap()
+        let by_count = match (
+            query.sort.scanned_count(&a.planet),
+            query.sort.scanned_count(&b.planet),
+        ) {
+            (Some(x), Some(y)) => y.cmp(&x),
+            _ => std::cmp::Ordering::Equal,
+        };
+        by_count
+            .then_with(|| a.distance_ly.partial_cmp(&b.distance_ly).unwrap())
             .then_with(|| a.system_hex.cmp(&b.system_hex))
             .then_with(|| a.planet.index.cmp(&b.planet.index))
     });
@@ -221,7 +269,12 @@ mod tests {
                 {"DD": {"UA": "0x00100000000064", "DT": "SolarSystem", "VP": []}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Explorer", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
                 {"DD": {"UA": "0x10100000000064", "DT": "Planet", "VP": ["0xAB", 0]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Explorer", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
                 {"DD": {"UA": "0x00200000000C80", "DT": "SolarSystem", "VP": []}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
-                {"DD": {"UA": "0x10200000000C80", "DT": "Planet", "VP": ["0xCD", 1]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}}
+                {"DD": {"UA": "0x10200000000C80", "DT": "Planet", "VP": ["0xCD", 1]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
+                {"DD": {"UA": "0x10100000000064", "DT": "Animal", "VP": ["0x1", "0x2", "0x3", "0x4"]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Explorer", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
+                {"DD": {"UA": "0x10200000000C80", "DT": "Animal", "VP": ["0x5", "0x6", "0x7", "0x8"]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
+                {"DD": {"UA": "0x10200000000C80", "DT": "Animal", "VP": ["0x9", "0xA", "0xB", "0xC"]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
+                {"DD": {"UA": "0x10200000000C80", "DT": "Animal", "VP": ["0xD", "0xE", "0xF", "0x10"]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}},
+                {"DD": {"UA": "0x10200000000C80", "DT": "Flora", "VP": ["0x11", "0x12"]}, "DM": {}, "OWS": {"LID": "", "UID": "1", "USN": "Traveler", "PTK": "ST", "TS": 1700000000}, "FL": {"U": 1}}
             ]}}}
         }"#;
         nms_save::parse_save(json.as_bytes())
@@ -293,6 +346,43 @@ mod tests {
     }
 
     #[test]
+    fn test_find_sorted_by_fauna_puts_the_most_recorded_first() {
+        let model = test_model();
+        let nearest = execute_find(&model, &FindQuery::default()).unwrap();
+        assert_eq!(
+            nearest[0].planet.scanned.fauna, 1,
+            "the near planet comes first by distance"
+        );
+        assert_eq!(nearest[1].planet.scanned, nms_core::Scanned::new(3, 1, 0));
+
+        let query = FindQuery {
+            sort: FindSort::Fauna,
+            ..Default::default()
+        };
+        let by_fauna = execute_find(&model, &query).unwrap();
+        assert_eq!(
+            by_fauna[0].planet.scanned.fauna, 3,
+            "the far planet comes first by fauna"
+        );
+        assert_eq!(by_fauna[1].planet.scanned.fauna, 1);
+
+        // With a scanned sort, `nearest` limits the sorted list rather than pre-fetching by distance.
+        let query = FindQuery {
+            sort: FindSort::Fauna,
+            nearest: Some(1),
+            ..Default::default()
+        };
+        let top = execute_find(&model, &query).unwrap();
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].planet.scanned.fauna, 3);
+
+        assert_eq!(FindSort::parse("Flora"), Ok(FindSort::Flora));
+        assert_eq!(FindSort::parse("minerals"), Ok(FindSort::Minerals));
+        assert_eq!(FindSort::parse("nearest"), Ok(FindSort::Distance));
+        assert!(FindSort::parse("size").is_err());
+    }
+
+    #[test]
     fn test_find_portal_hex_is_12_digits() {
         let model = test_model();
         let query = FindQuery::default();
@@ -337,6 +427,7 @@ mod tests {
             discoverer: None,
             named_only: false,
             from: ReferencePoint::CurrentPosition,
+            sort: FindSort::Distance,
         };
         let results = execute_find(&model, &query).unwrap();
         assert!(results.len() >= 2);

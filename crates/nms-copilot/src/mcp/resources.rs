@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 
 use nms_graph::GalaxyModel;
 
-use super::tools::{build_bases_json, build_galaxy_stats_json, build_where_am_i_json};
+use super::tools::{build_bases_json, build_galaxy_stats_json, build_player_position_json};
 
 /// MCP resource URI for the player's current location.
 pub const PLAYER_LOCATION_URI: &str = "nms://player/location";
@@ -64,7 +64,7 @@ impl ResourceRegistry for NmsResources {
         match uri {
             PLAYER_LOCATION_URI => Some(Box::pin(async move {
                 let model = model.read().await;
-                let json = build_where_am_i_json(&model)
+                let json = build_player_position_json(&model)
                     .map_err(|e| ErrorData::invalid_params(e, None))?;
                 let text = serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
                 Ok(vec![

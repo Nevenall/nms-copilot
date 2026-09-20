@@ -10,7 +10,7 @@ use crate::fleet::{ExpeditionRow, FleetStatus, FleetTarget};
 use crate::inventory::{ExocraftRow, HaveResult, InventoryResult, ItemTotal};
 use crate::layout::side_by_side;
 use crate::route::RouteResult;
-use crate::show::{ShowBaseResult, ShowResult, ShowSystemResult};
+use crate::show::ShowSystemResult;
 use crate::stats::StatsResult;
 use crate::table::{
     Builder, TableStyleConfig, build_grouped_table, build_table, nms_theme, nms_theme_no_color,
@@ -112,6 +112,9 @@ pub fn format_find_results(results: &[FindResult], theme: &Theme) -> String {
         "#",
         "Planet",
         "Biome",
+        "Fauna",
+        "Flora",
+        "Min.",
         "System",
         "Distance",
         "Address",
@@ -168,13 +171,16 @@ pub fn format_find_results(results: &[FindResult], theme: &Theme) -> String {
             (i + 1).to_string(),
             truncate(&planet_name, 20),
             truncate(&biome_str, 22),
+            r.planet.scanned.fauna.to_string(),
+            r.planet.scanned.flora.to_string(),
+            r.planet.scanned.minerals.to_string(),
             truncate(system_label, 22),
             distance,
             address,
             glyphs,
         ]);
     }
-    builder.push_record(["", "", "", "", "", "", ""]);
+    builder.push_record(["", "", "", "", "", "", "", "", "", ""]);
 
     build_grouped_table(
         builder,
@@ -267,7 +273,7 @@ pub fn format_show_system(result: &ShowSystemResult, theme: &Theme) -> String {
     } else {
         out.push('\n');
         let mut pbuilder = Builder::default();
-        pbuilder.push_record(["Index", "Name", "Biome", "Flags"]);
+        pbuilder.push_record(["Index", "Name", "Biome", "Fauna", "Flora", "Min.", "Flags"]);
         for p in &sys.planets {
             let pname = planet_label(p);
             let biome_str = p
@@ -284,9 +290,17 @@ pub fn format_show_system(result: &ShowSystemResult, theme: &Theme) -> String {
                 })
                 .unwrap_or_else(|| "?".to_string());
             let flags = if p.infested { "infested" } else { "" };
-            pbuilder.push_record([&p.index.to_string(), &pname, &biome_str, flags]);
+            pbuilder.push_record([
+                &p.index.to_string(),
+                &pname,
+                &biome_str,
+                &p.scanned.fauna.to_string(),
+                &p.scanned.flora.to_string(),
+                &p.scanned.minerals.to_string(),
+                flags,
+            ]);
         }
-        pbuilder.push_record(["", "", "", ""]);
+        pbuilder.push_record(["", "", "", "", "", "", ""]);
         out.push_str(&build_table(
             pbuilder,
             &[&format!("PLANETS ({})", sys.planets.len())],
@@ -296,40 +310,6 @@ pub fn format_show_system(result: &ShowSystemResult, theme: &Theme) -> String {
     }
 
     out
-}
-
-/// Format a base detail view.
-pub fn format_show_base(result: &ShowBaseResult, theme: &Theme) -> String {
-    let table_theme = table_theme_for(theme);
-    let base = &result.base;
-
-    let mut builder = Builder::default();
-    builder.push_record(["Property", "Detail"]);
-    builder.push_record(["Name", &base.name]);
-    builder.push_record(["Type", &base.base_type.to_string()]);
-    builder.push_record(["Galaxy", &result.galaxy_name]);
-    builder.push_record(["Portal Glyphs", &hex_to_emoji(&result.portal_hex)]);
-    builder.push_record(["Hex Address", &result.portal_hex]);
-    if let Some(dist) = result.distance_from_player {
-        builder.push_record(["Distance", &format_distance(dist)]);
-    }
-    if let Some(ref system) = result.system {
-        builder.push_record(["System", system.name.as_deref().unwrap_or("-")]);
-        builder.push_record(["Planets", &system.planets.len().to_string()]);
-    }
-    builder.push_record(["", ""]);
-
-    let mut out = String::new();
-    out.push_str(&build_table(builder, &["BASE DETAIL"], &table_theme, ""));
-    out
-}
-
-/// Format a show result (dispatches to system or base).
-pub fn format_show_result(result: &ShowResult, theme: &Theme) -> String {
-    match result {
-        ShowResult::System(s) => format_show_system(s, theme),
-        ShowResult::Base(b) => format_show_base(b, theme),
-    }
 }
 
 /// Format statistics output.
@@ -679,6 +659,7 @@ pub fn format_base_detail(
     builder.push_record(["Galaxy", &status.galaxy_name]);
     if let Some(ref system) = status.system {
         builder.push_record(["System", system.name.as_deref().unwrap_or("-")]);
+        builder.push_record(["Planets", &system.planets.len().to_string()]);
     }
     builder.push_record(["Portal Glyphs", &hex_to_emoji(&status.portal_hex)]);
     builder.push_record(["Hex Address", &status.portal_hex]);
@@ -971,6 +952,13 @@ pub fn format_navigator_line(status: &FleetStatus) -> String {
 
 /// One row per running expedition, then the Navigator line.
 pub fn format_fleet_overview(status: &FleetStatus, theme: &Theme) -> String {
+    let mut out = format_expeditions(status, theme);
+    out.push_str(&format!("\n  {}\n", format_navigator_line(status)));
+    out
+}
+
+/// The running expeditions as a table, one row each, with no Navigator line: the `list expeditions` view and the top of the `fleet` overview.
+pub fn format_expeditions(status: &FleetStatus, theme: &Theme) -> String {
     let table_theme = table_theme_for(theme);
     let mut out = String::new();
     if status.expeditions.is_empty() {
@@ -1006,7 +994,6 @@ pub fn format_fleet_overview(status: &FleetStatus, theme: &Theme) -> String {
         );
         out.push('\n');
     }
-    out.push_str(&format!("\n  {}\n", format_navigator_line(status)));
     out
 }
 
@@ -1121,7 +1108,6 @@ pub fn format_fleet(
 ) -> Result<String, String> {
     match target {
         FleetTarget::Overview => Ok(format_fleet_overview(status, theme)),
-        FleetTarget::Frigates => Ok(format_frigates(status, theme)),
         FleetTarget::Expedition(n) => status
             .expedition(n)
             .map(|row| format_expedition_detail(row, status.now, theme))

@@ -1,18 +1,12 @@
-//! `nms show` command -- detail views for systems and bases.
+//! `nms show` command -- one system in detail.
 
 use std::path::PathBuf;
 
-use nms_query::display::format_show_result;
-use nms_query::show::{ShowQuery, execute_show};
+use nms_query::display::format_show_system;
+use nms_query::show::show_system;
 use nms_query::theme::{Theme, should_use_colors};
 
-/// What to show -- parsed from CLI subcommand.
-pub enum ShowTarget {
-    System { name: String },
-    Base { name: String },
-}
-
-pub fn run(save: Option<PathBuf>, target: ShowTarget) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(save: Option<PathBuf>, name: String) -> Result<(), Box<dyn std::error::Error>> {
     let path = match save {
         Some(p) => p,
         None => nms_save::locate::find_most_recent_save()?
@@ -24,18 +18,13 @@ pub fn run(save: Option<PathBuf>, target: ShowTarget) -> Result<(), Box<dyn std:
     // The player's own system may be undiscovered; it is still worth showing.
     model.ensure_player_system();
 
-    let query = match target {
-        ShowTarget::System { name } => ShowQuery::System(name),
-        ShowTarget::Base { name } => ShowQuery::Base(name),
-    };
-
-    let result = execute_show(&model, &query)?;
+    let result = show_system(&model, &name)?;
     let theme = if should_use_colors(true) {
         Theme::default_dark()
     } else {
         Theme::none()
     };
-    print!("{}", format_show_result(&result, &theme));
+    print!("{}", format_show_system(&result, &theme));
 
     Ok(())
 }

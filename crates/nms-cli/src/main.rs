@@ -15,7 +15,6 @@ mod inventory;
 mod list;
 mod raw;
 mod route;
-mod saves;
 mod show;
 mod stats;
 
@@ -77,9 +76,13 @@ enum Commands {
         /// Distance from this base name (default: current position).
         #[arg(long)]
         from: Option<String>,
+
+        /// Order: distance (default), or fauna, flora, minerals for the most recorded first; then --nearest N keeps the top N.
+        #[arg(long, default_value = "distance")]
+        sort: String,
     },
 
-    /// Show detailed information about a system or base.
+    /// Show one system in detail: planets, address, and what the generator says about it.
     Show {
         /// Path to save file (auto-detects if omitted).
         #[arg(long)]
@@ -103,13 +106,13 @@ enum Commands {
         width: Option<usize>,
     },
 
-    /// Show frigate expeditions, the Navigator's offers, and the fleet.
+    /// Show frigate expeditions and the Navigator's offers, or one expedition in full.
     Fleet {
         /// Path to save file (auto-detects if omitted).
         #[arg(long)]
         save: Option<PathBuf>,
 
-        /// An expedition number for the full view, or "frigates" for every frigate. Omit for the overview.
+        /// An expedition number for the full view. Omit for the overview; the frigates are `list frigates`.
         target: Option<String>,
     },
 
@@ -271,9 +274,17 @@ enum Commands {
         #[arg(long)]
         from: Option<String>,
 
+        /// Order: distance (default), or fauna, flora, minerals for the most recorded first.
+        #[arg(long, default_value = "distance")]
+        sort: String,
+
         /// Output format: json, csv (default: json).
         #[arg(long, default_value = "json")]
         format: String,
+
+        /// Write to this file instead of standard output.
+        #[arg(long, value_name = "FILE")]
+        to: Option<PathBuf>,
     },
 
     /// Import community coordinate data.
@@ -321,9 +332,6 @@ enum Commands {
         shell: clap_complete::Shell,
     },
 
-    /// List all save slots.
-    Saves,
-
     /// Copy save files into dated backup folders, list what is kept, or prune old snapshots.
     Backup {
         /// Snapshot every file of every slot instead of the most recent save.
@@ -358,14 +366,9 @@ enum BackupCmd {
 
 #[derive(Subcommand)]
 enum ShowTargetCmd {
-    /// Show system details.
+    /// Show system details. A base in full is `base <name>`.
     System {
         /// System name or hex address.
-        name: String,
-    },
-    /// Show base details.
-    Base {
-        /// Base name (case-insensitive).
         name: String,
     },
 }
@@ -405,7 +408,7 @@ pub(crate) enum ListTargetCmd {
     /// List terrain generation types (GcBiomeSubType).
     #[command(name = "terrain-types")]
     TerrainTypes,
-    /// List every item you hold with its total across all containers.
+    /// List every item you hold with its total across all containers. One item by name is `have <item>`.
     Items {
         /// Only items of this type: substance, product, or technology.
         #[arg(long = "type")]
@@ -414,9 +417,6 @@ pub(crate) enum ListTargetCmd {
         /// Only items with at least this many.
         #[arg(long, default_value = "0")]
         min: u32,
-
-        /// Only items whose name or ID contains this.
-        pattern: Option<String>,
     },
     /// List owned ships with type, class, slots, and bonuses.
     Ships,
@@ -424,6 +424,12 @@ pub(crate) enum ListTargetCmd {
     Exocraft,
     /// List owned multi-tools with class, slots, and bonuses.
     Multitools,
+    /// List every frigate: class, grade, stats, traits, and whether it is out.
+    Frigates,
+    /// List the running expeditions, one row each.
+    Expeditions,
+    /// List every save slot of every account.
+    Saves,
 }
 
 /// Resolve a save file path from --save, --slot, or auto-detect.
@@ -504,6 +510,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             named,
             discoverer,
             from,
+            sort,
         } => {
             let path = resolve_save_with_slot(save, slot)?;
             find::run(find::FindArgs {
@@ -515,15 +522,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 named,
                 discoverer,
                 from,
+                sort,
             })
         }
         Commands::Show { save, target } => {
             let path = resolve_save_with_slot(save, slot)?;
-            let target = match target {
-                ShowTargetCmd::System { name } => show::ShowTarget::System { name },
-                ShowTargetCmd::Base { name } => show::ShowTarget::Base { name },
-            };
-            show::run(Some(path), target)
+            let ShowTargetCmd::System { name } = target;
+            show::run(Some(path), name)
         }
         Commands::Base { save, name, width } => {
             let path = resolve_save_with_slot(save, slot)?;
@@ -600,7 +605,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             named,
             discoverer,
             from,
+            sort,
             format,
+            to,
         } => {
             let path = resolve_save_with_slot(save, slot)?;
             export::run(export::ExportArgs {
@@ -612,7 +619,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 named,
                 discoverer,
                 from,
+                sort,
                 format,
+                to,
             })
         }
         Commands::Import { file, save, source } => import::run(file, save, source),
@@ -635,7 +644,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             })
         }
         Commands::Completions { shell } => completions::run(shell),
-        Commands::Saves => saves::run(),
         Commands::Backup {
             all,
             label,

@@ -21,14 +21,14 @@ use nms_query::base::{BaseQuery, alerts_from, execute_base};
 use nms_query::display::{
     expedition_status_cell, format_distance, format_navigator_line, hex_to_emoji,
 };
-use nms_query::find::{FindQuery, ReferencePoint, execute_find};
+use nms_query::find::{FindQuery, FindSort, ReferencePoint, execute_find};
 use nms_query::fleet::{execute_fleet, fleet_alerts};
 use nms_query::inventory::{
     HaveQuery, InventoryQuery, InventoryResult, execute_exocraft, execute_have, execute_inventory,
     holdings,
 };
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
-use nms_query::show::{ShowQuery, ShowResult, execute_show};
+use nms_query::show::show_system;
 use nms_query::stats::{StatsQuery, execute_stats};
 
 /// All NMS tools backed by a shared GalaxyModel.
@@ -49,16 +49,15 @@ impl NmsTools {
 impl ToolRegistry for NmsTools {
     fn tools(&self) -> Vec<Tool> {
         vec![
-            search_planets_tool(),
+            find_planets_tool(),
             plan_route_tool(),
-            where_am_i_tool(),
-            whats_nearby_tool(),
+            player_position_tool(),
+            nearby_planets_tool(),
             show_system_tool(),
-            show_base_tool(),
             base_status_tool(),
             fleet_status_tool(),
             have_item_tool(),
-            inventory_summary_tool(),
+            inventory_tool(),
             list_ships_tool(),
             convert_coordinates_tool(),
             galaxy_stats_tool(),
@@ -68,16 +67,15 @@ impl ToolRegistry for NmsTools {
     fn call(&self, name: &str, args: Value) -> Option<ToolResult> {
         let model = Arc::clone(&self.model);
         match name {
-            "search_planets" => Some(Box::pin(handle_search_planets(model, args))),
+            "find_planets" => Some(Box::pin(handle_find_planets(model, args))),
             "plan_route" => Some(Box::pin(handle_plan_route(model, args))),
-            "where_am_i" => Some(Box::pin(handle_where_am_i(model, args))),
-            "whats_nearby" => Some(Box::pin(handle_whats_nearby(model, args))),
+            "player_position" => Some(Box::pin(handle_player_position(model, args))),
+            "nearby_planets" => Some(Box::pin(handle_nearby_planets(model, args))),
             "show_system" => Some(Box::pin(handle_show_system(model, args))),
-            "show_base" => Some(Box::pin(handle_show_base(model, args))),
             "base_status" => Some(Box::pin(handle_base_status(model, args))),
             "fleet_status" => Some(Box::pin(handle_fleet_status(model, args))),
             "have_item" => Some(Box::pin(handle_have_item(model, args))),
-            "inventory_summary" => Some(Box::pin(handle_inventory_summary(model, args))),
+            "inventory" => Some(Box::pin(handle_inventory(model, args))),
             "list_ships" => Some(Box::pin(handle_list_ships(model, args))),
             "convert_coordinates" => Some(Box::pin(handle_convert(model, args))),
             "galaxy_stats" => Some(Box::pin(handle_galaxy_stats(model, args))),
@@ -95,10 +93,10 @@ fn schema(json: Value) -> Arc<serde_json::Map<String, Value>> {
     }
 }
 
-fn search_planets_tool() -> Tool {
+fn find_planets_tool() -> Tool {
     Tool::new(
-        "search_planets",
-        "Search planets by biome, distance, discoverer, or name.",
+        "find_planets",
+        "Find planets by biome, distance, discoverer, or name (the `find` command).",
         schema(json!({
             "type": "object",
             "properties": {
@@ -129,6 +127,10 @@ fn search_planets_tool() -> Tool {
                 "infested": {
                     "type": "boolean",
                     "description": "Only include infested planets"
+                },
+                "sort": {
+                    "type": "string",
+                    "description": "Order: distance (default), or fauna, flora, or minerals for the planets with the most recorded first, useful for finishing a planet's discoveries; nearest then keeps the top N"
                 }
             }
         })),
@@ -181,18 +183,18 @@ fn plan_route_tool() -> Tool {
     )
 }
 
-fn where_am_i_tool() -> Tool {
+fn player_position_tool() -> Tool {
     Tool::new(
-        "where_am_i",
-        "Get the player's current location.",
+        "player_position",
+        "The player's current location: system, coordinates, portal glyphs, galaxy.",
         Arc::new(empty_input_schema()),
     )
 }
 
-fn whats_nearby_tool() -> Tool {
+fn nearby_planets_tool() -> Tool {
     Tool::new(
-        "whats_nearby",
-        "Find systems and planets near the player's current position.",
+        "nearby_planets",
+        "The planets nearest the player's current position.",
         schema(json!({
             "type": "object",
             "properties": {
@@ -212,7 +214,7 @@ fn whats_nearby_tool() -> Tool {
 fn show_system_tool() -> Tool {
     Tool::new(
         "show_system",
-        "Get detailed information about a star system.",
+        "One star system in detail: its planets, address, and the region, generated name, and hover properties when the generator is installed.",
         schema(json!({
             "type": "object",
             "properties": {
@@ -226,27 +228,10 @@ fn show_system_tool() -> Tool {
     )
 }
 
-fn show_base_tool() -> Tool {
-    Tool::new(
-        "show_base",
-        "Get detailed information about a player base.",
-        schema(json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Base name (case-insensitive)"
-                }
-            },
-            "required": ["name"]
-        })),
-    )
-}
-
 fn base_status_tool() -> Tool {
     Tool::new(
         "base_status",
-        "Crops ready to harvest, supply depot fill by pipe network, and power equipment at the player's bases. Depot contents are as of the last save; crop timing is computed from the current clock.",
+        "The player's bases: where each is (galaxy, system, portal glyphs, distance), crops ready to harvest, supply depot fill by pipe network, and power equipment. Depot contents are as of the last save; crop timing is computed from the current clock. Give a name for one base in full.",
         schema(json!({
             "type": "object",
             "properties": {
@@ -288,9 +273,9 @@ fn have_item_tool() -> Tool {
     )
 }
 
-fn inventory_summary_tool() -> Tool {
+fn inventory_tool() -> Tool {
     Tool::new(
-        "inventory_summary",
+        "inventory",
         "Every container the player owns with its class, used and unlocked slots, free slots, and where it can be opened; or, given a container name, that container's contents slot by slot. Free space comes from the unlocked slots, not the grid's shape.",
         schema(json!({
             "type": "object",
@@ -365,7 +350,7 @@ fn tool_error(msg: &str) -> ErrorData {
 /// Build JSON for the player's current location.
 ///
 /// Returns `Err` if the player position is not available.
-pub(crate) fn build_where_am_i_json(model: &GalaxyModel) -> Result<serde_json::Value, String> {
+pub(crate) fn build_player_position_json(model: &GalaxyModel) -> Result<serde_json::Value, String> {
     let addr = model
         .player_position()
         .ok_or_else(|| "Player position not available".to_string())?;
@@ -449,7 +434,7 @@ pub(crate) fn build_bases_json(model: &GalaxyModel) -> serde_json::Value {
 
 // ── Tool Handlers ───────────────────────────────────────────────
 
-async fn handle_search_planets(
+async fn handle_find_planets(
     model: Arc<RwLock<GalaxyModel>>,
     args: Value,
 ) -> Result<CallToolResult, ErrorData> {
@@ -485,6 +470,10 @@ async fn handle_search_planets(
             .unwrap_or(false),
         name_pattern: None,
         from: reference,
+        sort: match args.get("sort").and_then(|v| v.as_str()) {
+            Some(word) => FindSort::parse(word).map_err(|e| tool_error(&e))?,
+            None => FindSort::Distance,
+        },
     };
 
     let results = execute_find(&model, &query).map_err(|e| tool_error(&e.to_string()))?;
@@ -496,6 +485,7 @@ async fn handle_search_planets(
                 "planet": r.planet.name.as_deref().unwrap_or("-"),
                 "biome": r.planet.biome.map(|b| b.to_string()),
                 "infested": r.planet.infested,
+                "scanned": scanned_json(&r.planet),
                 "system": r.system.name.as_deref().unwrap_or("-"),
                 "distance": format_distance(r.distance_ly),
                 "distance_ly": r.distance_ly,
@@ -609,16 +599,16 @@ async fn handle_plan_route(
     }))
 }
 
-async fn handle_where_am_i(
+async fn handle_player_position(
     model: Arc<RwLock<GalaxyModel>>,
     _args: Value,
 ) -> Result<CallToolResult, ErrorData> {
     let model = model.read().await;
-    let json = build_where_am_i_json(&model).map_err(|e| tool_error(&e))?;
+    let json = build_player_position_json(&model).map_err(|e| tool_error(&e))?;
     text_result(json)
 }
 
-async fn handle_whats_nearby(
+async fn handle_nearby_planets(
     model: Arc<RwLock<GalaxyModel>>,
     args: Value,
 ) -> Result<CallToolResult, ErrorData> {
@@ -671,86 +661,61 @@ async fn handle_show_system(
         .and_then(|v| v.as_str())
         .ok_or_else(|| tool_error("'name' is required"))?;
 
-    let result = execute_show(&model, &ShowQuery::System(name.into()))
-        .map_err(|e| tool_error(&e.to_string()))?;
+    let s = show_system(&model, name).map_err(|e| tool_error(&e.to_string()))?;
+    let planets: Vec<Value> = s
+        .system
+        .planets
+        .iter()
+        .map(|p| {
+            json!({
+                "index": p.index,
+                "name": p.name.as_deref().unwrap_or("-"),
+                "biome": p.biome.map(|b| b.to_string()),
+                "infested": p.infested,
+                "scanned": scanned_json(p),
+            })
+        })
+        .collect();
 
-    match result {
-        ShowResult::System(s) => {
-            let planets: Vec<Value> = s
-                .system
-                .planets
-                .iter()
-                .map(|p| {
-                    json!({
-                        "index": p.index,
-                        "name": p.name.as_deref().unwrap_or("-"),
-                        "biome": p.biome.map(|b| b.to_string()),
-                        "infested": p.infested,
-                    })
-                })
-                .collect();
-
-            let generated = s.generated.as_ref();
-            let attributes = generated.and_then(|g| g.attributes.as_ref()).map(|a| {
-                json!({
-                    "star": a.star.to_string(),
-                    "economy": a.economy.to_string(),
-                    "wealth": a.wealth.to_string(),
-                    "conflict": a.conflict.to_string(),
-                    "lifeform": a.race.map(|r| r.to_string()),
-                    "uncharted": a.uncharted,
-                    "abandoned": a.abandoned,
-                    "pirate": a.pirate,
-                    "planets": a.planets,
-                    "moons": a.moons,
-                })
-            });
-            text_result(json!({
-                "name": s.system.name.as_deref().or(generated.map(|g| g.name.as_str())).unwrap_or("-"),
-                "name_generated": s.system.name.is_none() && generated.is_some(),
-                "region": generated.map(|g| g.region.as_str()),
-                "attributes": attributes,
-                "galaxy": s.galaxy_name,
-                "discoverer": s.system.discoverer.as_deref().unwrap_or("unknown"),
-                "portal_glyphs_hex": s.portal_hex,
-                "portal_glyphs_emoji": hex_to_emoji(&s.portal_hex),
-                "distance_from_player": s.distance_from_player.map(format_distance),
-                "voxel_x": s.system.address.voxel_x(),
-                "voxel_y": s.system.address.voxel_y(),
-                "voxel_z": s.system.address.voxel_z(),
-                "planets": planets,
-            }))
-        }
-        ShowResult::Base(_) => Err(tool_error("unexpected result type")),
-    }
+    let generated = s.generated.as_ref();
+    let attributes = generated.and_then(|g| g.attributes.as_ref()).map(|a| {
+        json!({
+            "star": a.star.to_string(),
+            "economy": a.economy.to_string(),
+            "wealth": a.wealth.to_string(),
+            "conflict": a.conflict.to_string(),
+            "lifeform": a.race.map(|r| r.to_string()),
+            "uncharted": a.uncharted,
+            "abandoned": a.abandoned,
+            "pirate": a.pirate,
+            "planets": a.planets,
+            "moons": a.moons,
+        })
+    });
+    text_result(json!({
+        "name": s.system.name.as_deref().or(generated.map(|g| g.name.as_str())).unwrap_or("-"),
+        "name_generated": s.system.name.is_none() && generated.is_some(),
+        "region": generated.map(|g| g.region.as_str()),
+        "attributes": attributes,
+        "galaxy": s.galaxy_name,
+        "discoverer": s.system.discoverer.as_deref().unwrap_or("unknown"),
+        "portal_glyphs_hex": s.portal_hex,
+        "portal_glyphs_emoji": hex_to_emoji(&s.portal_hex),
+        "distance_from_player": s.distance_from_player.map(format_distance),
+        "voxel_x": s.system.address.voxel_x(),
+        "voxel_y": s.system.address.voxel_y(),
+        "voxel_z": s.system.address.voxel_z(),
+        "planets": planets,
+    }))
 }
 
-async fn handle_show_base(
-    model: Arc<RwLock<GalaxyModel>>,
-    args: Value,
-) -> Result<CallToolResult, ErrorData> {
-    let model = model.read().await;
-    let name = args
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| tool_error("'name' is required"))?;
-
-    let result = execute_show(&model, &ShowQuery::Base(name.into()))
-        .map_err(|e| tool_error(&e.to_string()))?;
-
-    match result {
-        ShowResult::Base(b) => text_result(json!({
-            "name": b.base.name,
-            "type": format!("{}", b.base.base_type),
-            "galaxy": b.galaxy_name,
-            "portal_glyphs_hex": b.portal_hex,
-            "portal_glyphs_emoji": hex_to_emoji(&b.portal_hex),
-            "distance_from_player": b.distance_from_player.map(format_distance),
-            "system": b.system.as_ref().and_then(|s| s.name.as_deref()),
-            "system_planet_count": b.system.as_ref().map(|s| s.planets.len()),
-        })),
-        ShowResult::System(_) => Err(tool_error("unexpected result type")),
-    }
+/// What the player has recorded on a planet, as the tools report it.
+fn scanned_json(planet: &nms_core::Planet) -> Value {
+    json!({
+        "fauna": planet.scanned.fauna,
+        "flora": planet.scanned.flora,
+        "minerals": planet.scanned.minerals,
+    })
 }
 
 /// Current Unix time in seconds.
@@ -797,7 +762,10 @@ pub(crate) fn build_base_status_json(
             "name": s.base.name,
             "type": format!("{}", s.base.base_type),
             "galaxy": s.galaxy_name,
+            "system": s.system.as_ref().and_then(|sys| sys.name.as_deref()),
+            "system_planet_count": s.system.as_ref().map(|sys| sys.planets.len()),
             "portal_glyphs_hex": s.portal_hex,
+            "portal_glyphs_emoji": hex_to_emoji(&s.portal_hex),
             "distance_from_player": s.distance_from_player.map(format_distance),
             "snapshot_unix": s.snapshot,
             "snapshot_age_secs": s.snapshot.map(|t| (now - t).max(0)),
@@ -1019,7 +987,7 @@ async fn handle_have_item(
     text_result(json!({ "pattern": pattern, "matches": items }))
 }
 
-async fn handle_inventory_summary(
+async fn handle_inventory(
     model: Arc<RwLock<GalaxyModel>>,
     args: Value,
 ) -> Result<CallToolResult, ErrorData> {
@@ -1208,24 +1176,36 @@ mod tests {
     }
 
     #[test]
-    fn test_tools_has_all_ten() {
+    fn test_tools_has_every_command_word() {
         let tools = NmsTools::new(test_model());
         let tool_list = tools.tools();
         let names: Vec<&str> = tool_list.iter().map(|t| t.name.as_ref()).collect();
-        assert_eq!(names.len(), 13);
-        assert!(names.contains(&"base_status"));
-        assert!(names.contains(&"fleet_status"));
-        assert!(names.contains(&"have_item"));
-        assert!(names.contains(&"inventory_summary"));
-        assert!(names.contains(&"list_ships"));
-        assert!(names.contains(&"search_planets"));
-        assert!(names.contains(&"plan_route"));
-        assert!(names.contains(&"where_am_i"));
-        assert!(names.contains(&"whats_nearby"));
-        assert!(names.contains(&"show_system"));
-        assert!(names.contains(&"show_base"));
-        assert!(names.contains(&"convert_coordinates"));
-        assert!(names.contains(&"galaxy_stats"));
+        assert_eq!(
+            names,
+            [
+                "find_planets",
+                "plan_route",
+                "player_position",
+                "nearby_planets",
+                "show_system",
+                "base_status",
+                "fleet_status",
+                "have_item",
+                "inventory",
+                "list_ships",
+                "convert_coordinates",
+                "galaxy_stats",
+            ]
+        );
+        for old in [
+            "search_planets",
+            "where_am_i",
+            "whats_nearby",
+            "show_base",
+            "inventory_summary",
+        ] {
+            assert!(tools.call(old, json!({})).is_none(), "{old} was renamed");
+        }
     }
 
     #[test]
@@ -1237,7 +1217,7 @@ mod tests {
     #[test]
     fn test_tools_tool_count() {
         let tools = NmsTools::new(test_model());
-        assert_eq!(tools.tool_count(), 13);
+        assert_eq!(tools.tool_count(), 12);
     }
 
     fn fixture_model() -> Arc<RwLock<GalaxyModel>> {
@@ -1281,9 +1261,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_inventory_summary_tool_overview_and_contents() {
+    async fn test_inventory_tool_overview_and_contents() {
         let tools = NmsTools::new(fixture_model());
-        let json = call_json(&tools, "inventory_summary", json!({})).await;
+        let json = call_json(&tools, "inventory", json!({})).await;
         let containers = json["containers"].as_array().unwrap();
         let suit = containers
             .iter()
@@ -1300,18 +1280,13 @@ mod tests {
             machine["unlocked"].is_null(),
             "no capacity is recorded for a machine buffer"
         );
-        let json = call_json(
-            &tools,
-            "inventory_summary",
-            json!({"container": "storage 1"}),
-        )
-        .await;
+        let json = call_json(&tools, "inventory", json!({"container": "storage 1"})).await;
         let slots = json["containers"][0]["slots"].as_array().unwrap();
         assert_eq!(slots.len(), 4);
         assert_eq!(slots[0]["name"], "Gold");
         assert!(
             tools
-                .call("inventory_summary", json!({"container": "locker"}))
+                .call("inventory", json!({"container": "locker"}))
                 .unwrap()
                 .await
                 .is_err()
@@ -1383,6 +1358,21 @@ mod tests {
             .unwrap()
             .await;
         assert!(missing.is_err());
+
+        // One base by name carries what `show_base` used to: the glyphs and the system.
+        let one = call_json(&tools, "base_status", json!({"name": "Alpha Base"})).await;
+        assert_eq!(one["count"], 1);
+        assert_eq!(one["bases"][0]["name"], "Alpha Base");
+        assert_eq!(one["bases"][0]["galaxy"], "Euclid");
+        assert!(
+            one["bases"][0]["portal_glyphs_emoji"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        );
+        assert!(
+            one["bases"][0]["system_planet_count"].is_number()
+                || one["bases"][0]["system_planet_count"].is_null()
+        );
     }
 
     #[test]
@@ -1392,9 +1382,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_where_am_i_returns_position() {
+    async fn test_player_position_returns_position() {
         let tools = NmsTools::new(test_model());
-        let result = tools.call("where_am_i", json!({})).unwrap().await;
+        let result = tools.call("player_position", json!({})).unwrap().await;
         assert!(result.is_ok());
         let ctr = result.unwrap();
         let text = extract_text(&ctr);
@@ -1417,9 +1407,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_search_planets_all() {
+    async fn test_find_planets_all() {
         let tools = NmsTools::new(test_model());
-        let result = tools.call("search_planets", json!({})).unwrap().await;
+        let result = tools.call("find_planets", json!({})).unwrap().await;
         assert!(result.is_ok());
         let ctr = result.unwrap();
         let text = extract_text(&ctr);
@@ -1428,27 +1418,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_search_planets_invalid_biome() {
+    async fn test_find_planets_invalid_biome() {
         let tools = NmsTools::new(test_model());
         let result = tools
-            .call("search_planets", json!({"biome": "NotABiome"}))
+            .call("find_planets", json!({"biome": "NotABiome"}))
             .unwrap()
             .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn test_whats_nearby_default() {
+    async fn test_nearby_planets_default() {
         let tools = NmsTools::new(test_model());
-        let result = tools.call("whats_nearby", json!({})).unwrap().await;
+        let result = tools.call("nearby_planets", json!({})).unwrap().await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_whats_nearby_with_count() {
+    async fn test_nearby_planets_with_count() {
         let tools = NmsTools::new(test_model());
         let result = tools
-            .call("whats_nearby", json!({"count": 1}))
+            .call("nearby_planets", json!({"count": 1}))
             .unwrap()
             .await;
         assert!(result.is_ok());
@@ -1456,37 +1446,6 @@ mod tests {
         let text = extract_text(&ctr);
         let v: Value = serde_json::from_str(&text).expect("valid JSON");
         assert!(v["count"].as_u64().unwrap() <= 1);
-    }
-
-    #[tokio::test]
-    async fn test_show_base_existing() {
-        let tools = NmsTools::new(test_model());
-        let result = tools
-            .call("show_base", json!({"name": "Alpha Base"}))
-            .unwrap()
-            .await;
-        assert!(result.is_ok());
-        let ctr = result.unwrap();
-        let text = extract_text(&ctr);
-        let v: Value = serde_json::from_str(&text).expect("valid JSON");
-        assert_eq!(v["name"], "Alpha Base");
-    }
-
-    #[tokio::test]
-    async fn test_show_base_not_found() {
-        let tools = NmsTools::new(test_model());
-        let result = tools
-            .call("show_base", json!({"name": "No Such Base"}))
-            .unwrap()
-            .await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_show_base_missing_name() {
-        let tools = NmsTools::new(test_model());
-        let result = tools.call("show_base", json!({})).unwrap().await;
-        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -1670,7 +1629,7 @@ mod tests {
 
         // Two concurrent tool calls should not deadlock
         let (r1, r2) = tokio::join!(
-            tools1.call("where_am_i", json!({})).unwrap(),
+            tools1.call("player_position", json!({})).unwrap(),
             tools2.call("galaxy_stats", json!({})).unwrap(),
         );
         assert!(r1.is_ok());

@@ -16,23 +16,20 @@ pub enum FleetTarget {
     Overview,
     /// One expedition in full, by its 1-based number in the overview.
     Expedition(usize),
-    /// Every frigate.
-    Frigates,
 }
 
 impl FleetTarget {
-    /// Parse the command's optional argument: nothing, `frigates`, or an expedition number.
+    /// Parse the command's optional argument: nothing, or an expedition number. The frigates are `list frigates`.
     pub fn parse(arg: Option<&str>) -> Result<Self, String> {
         match arg.map(str::trim) {
             None | Some("") => Ok(Self::Overview),
-            Some(s) if s.eq_ignore_ascii_case("frigates") => Ok(Self::Frigates),
             Some(s) => s
                 .parse::<usize>()
                 .ok()
                 .filter(|n| *n >= 1)
                 .map(Self::Expedition)
                 .ok_or_else(|| {
-                    format!("expected an expedition number or \"frigates\", got \"{s}\"")
+                    format!("expected an expedition number, got \"{s}\" (the frigates are `list frigates`)")
                 }),
         }
     }
@@ -371,9 +368,9 @@ mod tests {
     fn test_fleet_target_parse() {
         assert_eq!(FleetTarget::parse(None), Ok(FleetTarget::Overview));
         assert_eq!(FleetTarget::parse(Some(" ")), Ok(FleetTarget::Overview));
-        assert_eq!(
-            FleetTarget::parse(Some("Frigates")),
-            Ok(FleetTarget::Frigates)
+        assert!(
+            FleetTarget::parse(Some("frigates")).is_err(),
+            "the frigates moved to `list frigates`"
         );
         assert_eq!(
             FleetTarget::parse(Some("2")),

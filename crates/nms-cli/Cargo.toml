@@ -24,12 +24,10 @@ nms-query = { workspace = true }
 nms-namegen = { workspace = true }
 clap = { workspace = true }
 oxur-cli = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-csv = { workspace = true }
 clap_complete = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }

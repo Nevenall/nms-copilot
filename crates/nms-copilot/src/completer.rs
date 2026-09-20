@@ -2,7 +2,7 @@
 //!
 //! Provides context-aware completions:
 //! - Command names (find, show, stats, convert, info, help, exit, quit)
-//! - Subcommand names (show system, show base)
+//! - Subcommand names (show system, list saves, backup prune)
 //! - Flag names (--biome, --nearest, etc.)
 //! - Biome names from the Biome enum
 //! - Base names from the loaded model
@@ -38,8 +38,9 @@ const COMMANDS: &[&str] = &[
     "backup",
     "base",
     "convert",
-    "dash",
+    "dashboard",
     "exit",
+    "export",
     "find",
     "fleet",
     "have",
@@ -49,24 +50,27 @@ const COMMANDS: &[&str] = &[
     "list",
     "map",
     "quit",
+    "raw",
     "reset",
     "route",
     "set",
     "show",
     "stats",
-    "status",
 ];
 
-const SHOW_SUBCOMMANDS: &[&str] = &["system", "base"];
+const SHOW_SUBCOMMANDS: &[&str] = &["system"];
 
 const LIST_SUBCOMMANDS: &[&str] = &[
     "bases",
     "biomes",
     "exocraft",
+    "expeditions",
+    "frigates",
     "galaxies",
     "glyphs",
     "items",
     "multitools",
+    "saves",
     "ships",
     "systems",
 ];
@@ -85,15 +89,31 @@ const FIND_FLAGS: &[&str] = &[
     "--named",
     "--discoverer",
     "--from",
+    "--sort",
 ];
+
+const SORT_WORDS: &[&str] = &["distance", "fauna", "flora", "minerals"];
 
 const STATS_FLAGS: &[&str] = &["--biomes", "--discoveries"];
 
 const BASE_FLAGS: &[&str] = &["--width"];
 
-const FLEET_SUBCOMMANDS: &[&str] = &["frigates"];
+const BACKUP_SUBCOMMANDS: &[&str] = &["list", "off", "on", "prune"];
 
-const BACKUP_SUBCOMMANDS: &[&str] = &["list", "off", "on"];
+const EXPORT_FLAGS: &[&str] = &[
+    "--biome",
+    "--infested",
+    "--within",
+    "--nearest",
+    "--named",
+    "--discoverer",
+    "--from",
+    "--sort",
+    "--format",
+    "--to",
+];
+
+const RAW_FLAGS: &[&str] = &["--depth", "--limit", "--keys", "--find"];
 
 const CONVERT_FLAGS: &[&str] = &[
     "--glyphs", "--coords", "--ga", "--voxel", "--ssi", "--planet", "--galaxy",
@@ -147,9 +167,6 @@ impl Completer for CopilotCompleter {
             ["list"] if trailing_space => ("", LIST_SUBCOMMANDS.to_vec()),
             ["list", _] if !trailing_space => (words[1], LIST_SUBCOMMANDS.to_vec()),
 
-            ["fleet"] if trailing_space => ("", FLEET_SUBCOMMANDS.to_vec()),
-            ["fleet", _] if !trailing_space => (words[1], FLEET_SUBCOMMANDS.to_vec()),
-
             ["have", .., "--type"] if trailing_space => {
                 return self.filter_suggestions("", ITEM_TYPES, pos);
             }
@@ -189,13 +206,6 @@ impl Completer for CopilotCompleter {
 
             ["show"] if trailing_space => ("", SHOW_SUBCOMMANDS.to_vec()),
             ["show", _] if !trailing_space => (words[1], SHOW_SUBCOMMANDS.to_vec()),
-
-            ["show", "base"] if trailing_space => {
-                return self.complete_names("", &self.model_data.base_names, pos);
-            }
-            ["show", "base", _] if !trailing_space => {
-                return self.complete_names(words[2], &self.model_data.base_names, pos);
-            }
 
             ["base", ..] if !trailing_space && words.last().is_some_and(|w| w.starts_with('-')) => {
                 return self.filter_suggestions(words[words.len() - 1], BASE_FLAGS, pos);
@@ -238,7 +248,23 @@ impl Completer for CopilotCompleter {
             ["reset", _] if !trailing_space => (words[1], RESET_TARGETS.to_vec()),
 
             [cmd, ..] if *cmd == "find" => {
-                return self.complete_find_context(line_to_pos, &words, pos);
+                return self.complete_find_context(line_to_pos, &words, pos, FIND_FLAGS);
+            }
+
+            [cmd, ..] if *cmd == "export" => {
+                return self.complete_find_context(line_to_pos, &words, pos, EXPORT_FLAGS);
+            }
+
+            [cmd, ..] if *cmd == "raw" => {
+                let partial = if trailing_space {
+                    ""
+                } else {
+                    words.last().copied().unwrap_or("")
+                };
+                if !partial.starts_with('-') && !(trailing_space && words.len() >= 2) {
+                    return vec![];
+                }
+                (partial, RAW_FLAGS.to_vec())
             }
 
             [cmd, ..] if *cmd == "route" => {
@@ -271,11 +297,13 @@ impl Completer for CopilotCompleter {
 }
 
 impl CopilotCompleter {
+    /// `find` and `export` share their filters; `flags` is the command's own flag list.
     fn complete_find_context(
         &self,
         line_to_pos: &str,
         words: &[&str],
         pos: usize,
+        flags: &[&str],
     ) -> Vec<Suggestion> {
         let last = if line_to_pos.ends_with(' ') {
             ""
@@ -299,7 +327,15 @@ impl CopilotCompleter {
             return self.complete_names(last, &self.model_data.base_names, pos);
         }
 
-        self.filter_suggestions(last, FIND_FLAGS, pos)
+        if prev == Some("--format") {
+            return self.filter_suggestions(last, &["csv", "json"], pos);
+        }
+
+        if prev == Some("--sort") {
+            return self.filter_suggestions(last, SORT_WORDS, pos);
+        }
+
+        self.filter_suggestions(last, flags, pos)
     }
 
     fn complete_route_context(
@@ -423,23 +459,13 @@ mod tests {
         let mut c = test_completer();
         let results = c.complete("show ", 5);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
-        assert!(values.contains(&"system"));
-        assert!(values.contains(&"base"));
-    }
-
-    #[test]
-    fn test_complete_show_base_names() {
-        let mut c = test_completer();
-        let results = c.complete("show base A", 11);
-        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
-        assert!(values.iter().any(|v| v.contains("Acadia")));
-        assert!(values.iter().any(|v| v.contains("Alpha")));
+        assert_eq!(values, ["system"], "a base in full is `base <name>`");
     }
 
     #[test]
     fn test_complete_base_name_with_spaces_is_quoted() {
         let mut c = test_completer();
-        let results = c.complete("show base Aca", 13);
+        let results = c.complete("base Aca", 8);
         assert!(!results.is_empty());
         assert!(results[0].value.starts_with('"'));
     }
@@ -509,14 +535,13 @@ mod tests {
         let mut c = test_completer();
         let results = c.complete("SHOW ", 5);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
-        assert!(values.contains(&"system"));
-        assert!(values.contains(&"base"));
+        assert_eq!(values, ["system"]);
     }
 
     #[test]
-    fn test_complete_case_insensitive_show_base() {
+    fn test_complete_case_insensitive_base() {
         let mut c = test_completer();
-        let results = c.complete("Show Base a", 11);
+        let results = c.complete("Base a", 6);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
         assert!(values.iter().any(|v| v.contains("Acadia")));
     }
@@ -627,14 +652,49 @@ mod tests {
     }
 
     #[test]
-    fn test_complete_fleet_command_offers_frigates() {
+    fn test_complete_list_offers_fleet_and_saves() {
         let mut c = test_completer();
-        let results = c.complete("fleet ", 6);
+        let results = c.complete("list fr", 7);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
         assert_eq!(values, ["frigates"]);
-        let results = c.complete("fleet fr", 8);
+        let results = c.complete("list ex", 7);
         let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
-        assert_eq!(values, ["frigates"]);
+        assert_eq!(values, ["exocraft", "expeditions"]);
+        let results = c.complete("list sa", 7);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["saves"]);
+        assert!(
+            c.complete("fleet ", 6).is_empty(),
+            "fleet takes an expedition number, which nothing completes"
+        );
+    }
+
+    #[test]
+    fn test_complete_export_raw_backup_and_dashboard() {
+        let mut c = test_completer();
+        let results = c.complete("export --f", 10);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["--from", "--format"]);
+        let results = c.complete("export --biome L", 16);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(values.contains(&"Lush"));
+        let results = c.complete("raw --k", 7);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["--keys"]);
+        assert!(
+            c.complete("raw Base", 8).is_empty(),
+            "save paths are not completed"
+        );
+        let results = c.complete("backup pr", 9);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["prune"]);
+        let results = c.complete("dash", 4);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(values, ["dashboard"]);
+        assert!(
+            c.complete("stat", 4).iter().all(|s| s.value == "stats"),
+            "status is gone"
+        );
     }
 
     #[test]

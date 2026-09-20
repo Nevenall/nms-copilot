@@ -1,6 +1,7 @@
 use nms_graph::GalaxyModel;
-use nms_query::display::format_show_result;
-use nms_query::show::{ShowQuery, ShowResult, execute_show};
+use nms_query::base::{BaseQuery, execute_base};
+use nms_query::display::{format_base_detail, format_show_system};
+use nms_query::show::show_system;
 use nms_query::theme::Theme;
 
 fn test_save_json() -> &'static str {
@@ -26,24 +27,45 @@ fn test_save_json() -> &'static str {
 }
 
 #[test]
-fn show_base_end_to_end() {
+fn base_detail_end_to_end() {
     let save = nms_save::parse_save(test_save_json().as_bytes()).unwrap();
     let model = GalaxyModel::from_save(&save);
 
-    let result = execute_show(&model, &ShowQuery::Base("Sealab 2038".into())).unwrap();
-    let output = format_show_result(&result, &Theme::none());
+    let statuses = execute_base(
+        &model,
+        &BaseQuery {
+            name: Some("Sealab 2038".into()),
+        },
+        1_700_000_000,
+    )
+    .unwrap();
+    assert_eq!(statuses.len(), 1);
+    let output = format_base_detail(&statuses[0], 1_700_000_000, &Theme::none(), Some(120));
 
     assert!(output.contains("Sealab 2038"));
-    assert!(output.contains("HomePlanetBase"));
+    assert!(output.contains("home"), "{output}");
     assert!(output.contains("Euclid"));
+    assert!(
+        output.contains("Planets"),
+        "the row show base used to have: {output}"
+    );
 }
 
 #[test]
-fn show_base_case_insensitive() {
+fn base_detail_case_insensitive() {
     let save = nms_save::parse_save(test_save_json().as_bytes()).unwrap();
     let model = GalaxyModel::from_save(&save);
 
-    assert!(execute_show(&model, &ShowQuery::Base("sealab 2038".into())).is_ok());
+    assert!(
+        execute_base(
+            &model,
+            &BaseQuery {
+                name: Some("sealab 2038".into())
+            },
+            0
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -54,16 +76,11 @@ fn show_system_with_planets() {
     // Look up the system by hex address
     let sys_id = model.systems.keys().next().unwrap();
     let hex = format!("{:012X}", sys_id.0);
-    let result = execute_show(&model, &ShowQuery::System(hex)).unwrap();
+    let s = show_system(&model, &hex).unwrap();
 
-    match result {
-        ShowResult::System(s) => {
-            assert!(!s.system.planets.is_empty());
-            let output = format_show_result(&ShowResult::System(s), &Theme::none());
-            assert!(output.contains("SYSTEM DETAIL"));
-        }
-        _ => panic!("Expected system result"),
-    }
+    assert!(!s.system.planets.is_empty());
+    let output = format_show_system(&s, &Theme::none());
+    assert!(output.contains("SYSTEM DETAIL"));
 }
 
 #[test]
@@ -71,7 +88,16 @@ fn show_nonexistent_base_errors() {
     let save = nms_save::parse_save(test_save_json().as_bytes()).unwrap();
     let model = GalaxyModel::from_save(&save);
 
-    assert!(execute_show(&model, &ShowQuery::Base("No Such Base".into())).is_err());
+    assert!(
+        execute_base(
+            &model,
+            &BaseQuery {
+                name: Some("No Such Base".into())
+            },
+            0
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -79,5 +105,5 @@ fn show_nonexistent_system_errors() {
     let save = nms_save::parse_save(test_save_json().as_bytes()).unwrap();
     let model = GalaxyModel::from_save(&save);
 
-    assert!(execute_show(&model, &ShowQuery::System("NoSystem".into())).is_err());
+    assert!(show_system(&model, "NoSystem").is_err());
 }

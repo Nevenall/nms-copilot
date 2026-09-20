@@ -9,18 +9,22 @@ use nms_graph::query::BiomeFilter;
 use nms_graph::route::RoutingAlgorithm;
 use nms_query::base::{BaseQuery, execute_base};
 use nms_query::display::{
-    format_base_detail, format_base_overview, format_exocraft, format_find_results, format_fleet,
-    format_have, format_inventory, format_items, format_multitools, format_route, format_ships,
-    format_show_result, format_stats, hex_to_emoji,
+    format_base_detail, format_base_overview, format_exocraft, format_expeditions,
+    format_find_results, format_fleet, format_frigates, format_have, format_inventory,
+    format_items, format_multitools, format_route, format_ships, format_show_system, format_stats,
+    hex_to_emoji,
 };
-use nms_query::find::{FindQuery, ReferencePoint, execute_find};
+use nms_query::export::{ExportFormat, render_export};
+use nms_query::find::{FindQuery, FindSort, ReferencePoint, execute_find};
 use nms_query::fleet::{FleetTarget, execute_fleet};
 use nms_query::inventory::{
     HaveQuery, InventoryQuery, ListItemsQuery, execute_exocraft, execute_have, execute_inventory,
     execute_list_items, holdings,
 };
+use nms_query::raw::{RawQuery, format_raw};
 use nms_query::route::{RouteFrom, RouteQuery, TargetSelection, execute_route};
-use nms_query::show::{ShowQuery, execute_show};
+use nms_query::saves::format_save_slots;
+use nms_query::show::show_system;
 use nms_query::stats::{StatsQuery, execute_stats};
 use nms_query::table::{Builder, build_table, nms_theme};
 use nms_query::theme::Theme;
@@ -47,34 +51,64 @@ pub fn dispatch(
             named,
             discoverer,
             from,
+            sort,
         } => {
-            let biome = biome
-                .as_ref()
-                .map(|s| s.parse::<Biome>())
-                .transpose()
-                .map_err(|e| format!("Invalid biome: {e}"))?
-                .or(session.biome_filter);
-
-            let reference = match from {
-                Some(name) => ReferencePoint::Base(name.clone()),
-                None => ReferencePoint::CurrentPosition,
-            };
-
-            let query = FindQuery {
-                biome,
-                biome_subtype: None,
-                infested: if *infested { Some(true) } else { None },
-                within_ly: *within,
-                nearest: *nearest,
-                name_pattern: None,
-                discoverer: discoverer.clone(),
-                named_only: *named,
-                from: reference,
-            };
-
+            let query = find_query(
+                session, biome, *infested, *within, *nearest, discoverer, *named, from, sort,
+            )?;
             let results = execute_find(model, &query).map_err(|e| e.to_string())?;
             let theme = Theme::default_dark();
             Ok(format_find_results(&results, &theme))
+        }
+
+        Action::Export {
+            biome,
+            infested,
+            within,
+            nearest,
+            named,
+            discoverer,
+            from,
+            sort,
+            format,
+            to,
+        } => {
+            let format = ExportFormat::parse(format)?;
+            let query = find_query(
+                session, biome, *infested, *within, *nearest, discoverer, *named, from, sort,
+            )?;
+            let results = execute_find(model, &query).map_err(|e| e.to_string())?;
+            let text = render_export(&results, format).map_err(|e| e.to_string())?;
+            match to {
+                Some(file) => {
+                    std::fs::write(file, text)
+                        .map_err(|e| format!("could not write {file}: {e}"))?;
+                    Ok(format!("Wrote {} planets to {file}\n", results.len()))
+                }
+                None => Ok(text),
+            }
+        }
+
+        Action::Raw {
+            path,
+            depth,
+            limit,
+            keys,
+            find,
+        } => {
+            let file = session
+                .save_file
+                .as_ref()
+                .ok_or("raw needs a save.hg file in the game's folder; this session follows something else.")?;
+            let root = nms_save::read_save_json(file.path()).map_err(|e| e.to_string())?;
+            let query = RawQuery {
+                path: path.clone(),
+                depth: *depth,
+                limit: *limit,
+                keys: *keys,
+                find: find.clone(),
+            };
+            format_raw(&root, &query).map(|s| s + "\n")
         }
 
         Action::List { target } => dispatch_list(model, target),
@@ -120,13 +154,17 @@ pub fn dispatch(
             round_trip,
         ),
 
-        Action::Set { target } => dispatch_set(model, session, target),
+        Action::Set {
+            target: Some(target),
+        } => dispatch_set(model, session, target),
+        Action::Set { target: None } => Ok(session.format_settings()),
         Action::Reset { target } => Ok(dispatch_reset(model, session, target)),
-        Action::Status => Ok(session.format_status()),
 
-        Action::Backup { action, label } => {
-            dispatch_backup(session, action.as_deref(), label.as_deref())
-        }
+        Action::Backup {
+            action,
+            label,
+            keep,
+        } => dispatch_backup(session, action.as_deref(), label.as_deref(), *keep),
 
         Action::Info => {
             let systems = model.systems.len();
@@ -138,14 +176,16 @@ pub fn dispatch(
                 .map(|ps| format!("{}", ps.current_address))
                 .unwrap_or_else(|| "unknown".into());
             Ok(format!(
-                "Loaded model: {systems} systems, {planets} planets, {bases} bases\n\
-                 Current position: {pos}\n"
+                "Galaxy:      {} ({})\nModel:       {systems} systems, {planets} planets, {bases} bases\nPosition:    {pos}\n{}",
+                session.galaxy.name,
+                session.galaxy.galaxy_type,
+                session.format_alerts()
             ))
         }
 
         Action::Help => Ok(help_text()),
 
-        Action::Map | Action::Dash | Action::Exit | Action::Quit => Ok(String::new()),
+        Action::Map | Action::Dashboard | Action::Exit | Action::Quit => Ok(String::new()),
 
         Action::Convert {
             glyphs,
@@ -157,6 +197,43 @@ pub fn dispatch(
             galaxy,
         } => dispatch_convert(glyphs, coords, ga, voxel, *ssi, *planet, galaxy),
     }
+}
+
+/// The `find` query behind `find` and `export`, with the session's biome filter as the default.
+#[allow(clippy::too_many_arguments)]
+fn find_query(
+    session: &SessionState,
+    biome: &Option<String>,
+    infested: bool,
+    within: Option<f64>,
+    nearest: Option<usize>,
+    discoverer: &Option<String>,
+    named: bool,
+    from: &Option<String>,
+    sort: &str,
+) -> Result<FindQuery, String> {
+    let biome = biome
+        .as_ref()
+        .map(|s| s.parse::<Biome>())
+        .transpose()
+        .map_err(|e| format!("Invalid biome: {e}"))?
+        .or(session.biome_filter);
+    let reference = match from {
+        Some(name) => ReferencePoint::Base(name.clone()),
+        None => ReferencePoint::CurrentPosition,
+    };
+    Ok(FindQuery {
+        biome,
+        biome_subtype: None,
+        infested: if infested { Some(true) } else { None },
+        within_ly: within,
+        nearest,
+        name_pattern: None,
+        discoverer: discoverer.clone(),
+        named_only: named,
+        from: reference,
+        sort: FindSort::parse(sort)?,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -431,11 +508,10 @@ fn dispatch_list(model: &GalaxyModel, target: &ListTarget) -> Result<String, Str
             Ok(out)
         }
 
-        ListTarget::Items { kind, min, pattern } => {
+        ListTarget::Items { kind, min } => {
             let query = ListItemsQuery {
                 kind: parse_kind(kind.as_deref())?,
                 min_amount: *min,
-                pattern: pattern.clone(),
             };
             let items = execute_list_items(model, &query).map_err(|e| e.to_string())?;
             Ok(format_items(&items, &Theme::default_dark()))
@@ -452,6 +528,17 @@ fn dispatch_list(model: &GalaxyModel, target: &ListTarget) -> Result<String, Str
             &holdings(model).map_err(|e| e.to_string())?.multitools,
             &Theme::default_dark(),
         )),
+        ListTarget::Frigates => {
+            let status =
+                execute_fleet(model, crate::session::unix_now()).map_err(|e| e.to_string())?;
+            Ok(format_frigates(&status, &Theme::default_dark()))
+        }
+        ListTarget::Expeditions => {
+            let status =
+                execute_fleet(model, crate::session::unix_now()).map_err(|e| e.to_string())?;
+            Ok(format_expeditions(&status, &Theme::default_dark()))
+        }
+        ListTarget::Saves => format_save_slots(&theme).map_err(|e| e.to_string()),
     }
 }
 
@@ -499,13 +586,10 @@ fn dispatch_inventory(
 }
 
 fn dispatch_show(model: &GalaxyModel, target: &ShowTarget) -> Result<String, String> {
-    let query = match target {
-        ShowTarget::System { name } => ShowQuery::System(name.clone()),
-        ShowTarget::Base { name } => ShowQuery::Base(name.clone()),
-    };
-    let result = execute_show(model, &query).map_err(|e| e.to_string())?;
+    let ShowTarget::System { name } = target;
+    let result = show_system(model, name).map_err(|e| e.to_string())?;
     let theme = Theme::default_dark();
-    Ok(format_show_result(&result, &theme))
+    Ok(format_show_system(&result, &theme))
 }
 
 fn dispatch_set(
@@ -662,18 +746,19 @@ fn dispatch_base(
     }
 }
 
-/// `fleet` / `fleet <n>` / `fleet frigates`: the expedition overview, one expedition in full, or every frigate.
+/// `fleet` / `fleet <n>`: the expedition overview or one expedition in full.
 fn dispatch_fleet(model: &GalaxyModel, target: Option<&str>) -> Result<String, String> {
     let target = FleetTarget::parse(target)?;
     let status = execute_fleet(model, crate::session::unix_now()).map_err(|e| e.to_string())?;
     format_fleet(&status, target, &Theme::default_dark())
 }
 
-/// `backup` / `backup on|off` / `backup list`, with `--label` for a snapshot taken now.
+/// `backup` / `backup on|off` / `backup list` / `backup prune --keep N`, with `--label` for a snapshot taken now.
 fn dispatch_backup(
     session: &mut SessionState,
     action: Option<&str>,
     label: Option<&str>,
+    keep: usize,
 ) -> Result<String, String> {
     let policy = session
         .backup_policy
@@ -715,8 +800,17 @@ fn dispatch_backup(
                 &nms_theme(),
             ))
         }
+        Some("prune") => {
+            let account = backup::account_name(followed()?.path()).map_err(|e| e.to_string())?;
+            let removed = backup::prune(&policy.root, &account, keep).map_err(|e| e.to_string())?;
+            Ok(format!(
+                "Removed {} snapshot{}, keeping the newest {keep} unlabelled per slot.\n",
+                removed.len(),
+                if removed.len() == 1 { "" } else { "s" }
+            ))
+        }
         Some(other) => Err(format!(
-            "Unknown backup action \"{other}\". Use on, off, or list, or omit it to snapshot now."
+            "Unknown backup action \"{other}\". Use on, off, list, or prune, or omit it to snapshot now."
         )),
     }
 }
@@ -781,22 +875,23 @@ NMS Copilot -- Interactive Galaxy Explorer
 
 Commands:
   find       Search planets by biome, distance, name
-  list       List galaxies, biomes, glyphs, bases, systems, terrain-types, items, ships, exocraft, multitools
-  map        Open interactive galaxy map
-  dash       Return to the dashboard (an empty line does the same)
-  route      Plan a route through discovered systems
-  show       Show system or base details
-  base       Show crops, extraction networks, and power at your bases
-  fleet      Show frigate expeditions, the Navigator's offers, and the fleet
+  show       Show one system in detail (show system <name or hex>)
+  list       List galaxies, biomes, glyphs, terrain-types, bases, systems, items, ships, exocraft, multitools, frigates, expeditions, saves
+  base       Crops, extraction networks, and power at every base, or one base in full (base \"Farm\")
+  fleet      Frigate expeditions and the Navigator's offers, or one expedition in full (fleet 2)
   have       Do I have an item, how much, and where? (have gold)
   inventory  Every container and how full it is; inventory \"storage 3\" for its contents
-  backup     Snapshot the save now; backup on | off | list
-  stats      Display aggregate galaxy statistics
+  route      Plan a route through discovered systems
   convert    Convert between coordinate formats
-  set        Set session context (position, biome, warp-range)
+  export     The planets a find would match, as JSON or CSV (export --format csv --to planets.csv)
+  raw        Any part of the decoded save as JSON (raw BaseContext.PlayerStateData --keys)
+  backup     Snapshot the save now; backup on | off | list | prune
+  stats      Aggregate galaxy statistics
+  info       The loaded model, your position, and the current alerts
+  set        Show the session settings, or set one (position, biome, warp-range)
   reset      Reset session state (position, biome, warp-range, all)
-  status     Show current session state
-  info       Show loaded model summary
+  map        Open interactive galaxy map
+  dashboard  Return to the dashboard (dash and an empty line do the same)
   help       Show this help message
   exit/quit  Exit the REPL
 
@@ -808,27 +903,28 @@ Examples:
   route --biome Lush --warp-range 2500
   route --target \"Alpha Base\" --target \"Beta Base\"
   show system 0x050003AB8C07
-  show base \"Acadia National Park\"
   base
   base \"Farm\"
   fleet
   fleet 1
-  fleet frigates
+  list frigates
   have gold
   have gas --type substance
   inventory --free
   inventory \"storage 3\"
   list items --min 1000
   list ships
+  export --biome Lush --format csv --to lush.csv
+  raw BaseContext.PlayerStateData.FleetExpeditions[0] --depth 1
   backup --label before-call
   backup on
   stats --biomes
   convert --glyphs 01717D8A4EA2
+  set
   set biome Lush
   set position \"Home Base\"
   set warp-range 2500
   reset biome
-  status
 "
     .into()
 }

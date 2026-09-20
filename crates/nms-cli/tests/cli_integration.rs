@@ -477,6 +477,38 @@ fn test_nms_export_csv_produces_header_row() {
 }
 
 #[test]
+fn test_nms_export_to_file_writes_it() {
+    let fixture = fixture_path("multi_system_save.json");
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("planets.csv");
+    cargo_bin_cmd!("nms")
+        .args([
+            "export",
+            "--save",
+            fixture.to_str().unwrap(),
+            "--format",
+            "csv",
+            "--to",
+            out.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("Wrote"));
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.starts_with("planet_name,"), "{text}");
+}
+
+#[test]
+fn test_nms_list_items_takes_no_name() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "items", "gold"])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn test_nms_export_invalid_format_fails() {
     let fixture = fixture_path("multi_system_save.json");
     cargo_bin_cmd!("nms")
@@ -563,6 +595,46 @@ fn test_nms_find_from_base_reference() {
         ])
         .assert()
         .success();
+}
+
+#[test]
+fn test_nms_find_sort_fauna_puts_the_most_recorded_first() {
+    let fixture = fixture_path("multi_system_save.json");
+    let output = cargo_bin_cmd!("nms")
+        .args([
+            "find",
+            "--save",
+            fixture.to_str().unwrap(),
+            "--sort",
+            "fauna",
+            "--nearest",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Fauna"), "{stdout}");
+    // The planet with three creatures and one mineral recorded leads, whatever its distance.
+    let row = stdout
+        .lines()
+        .find(|l| l.contains(" 1 ") && l.contains("Planet 2"))
+        .unwrap_or_else(|| panic!("{stdout}"));
+    assert!(
+        row.contains(" 3 ") && row.contains(" 0 ") && row.contains(" 1 "),
+        "{row}"
+    );
+    cargo_bin_cmd!("nms")
+        .args([
+            "find",
+            "--save",
+            fixture.to_str().unwrap(),
+            "--sort",
+            "size",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown sort"));
 }
 
 // ---- Raw command tests ----
@@ -743,10 +815,10 @@ fn test_nms_fleet_expedition_detail_shows_sections() {
 }
 
 #[test]
-fn test_nms_fleet_frigates_lists_every_frigate() {
+fn test_nms_list_frigates_lists_every_frigate() {
     let fixture = fixture_path("multi_system_save.json");
     cargo_bin_cmd!("nms")
-        .args(["fleet", "frigates", "--save", fixture.to_str().unwrap()])
+        .args(["list", "--save", fixture.to_str().unwrap(), "frigates"])
         .assert()
         .success()
         .stdout(predicate::str::contains("FRIGATES"))
@@ -754,6 +826,50 @@ fn test_nms_fleet_frigates_lists_every_frigate() {
         .stdout(predicate::str::contains("expedition 1"))
         .stdout(predicate::str::contains("home"))
         .stdout(predicate::str::contains("Korvax"));
+    cargo_bin_cmd!("nms")
+        .args(["fleet", "frigates", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("list frigates"));
+}
+
+#[test]
+fn test_nms_list_expeditions_is_the_table_without_the_navigator() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["list", "--save", fixture.to_str().unwrap(), "expeditions"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Expeditions"))
+        .stdout(predicate::str::contains("waiting for you"))
+        .stdout(predicate::str::contains("Navigator").not());
+}
+
+#[test]
+fn test_nms_saves_moved_to_list_saves() {
+    cargo_bin_cmd!("nms").args(["saves"]).assert().failure();
+    cargo_bin_cmd!("nms")
+        .args(["list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saves"))
+        .stdout(predicate::str::contains("frigates"))
+        .stdout(predicate::str::contains("expeditions"));
+}
+
+#[test]
+fn test_nms_show_base_is_gone_and_base_has_its_rows() {
+    let fixture = fixture_path("multi_system_save.json");
+    cargo_bin_cmd!("nms")
+        .args(["show", "base", "lush", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .failure();
+    cargo_bin_cmd!("nms")
+        .args(["base", "lush", "--save", fixture.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Portal Glyphs"))
+        .stdout(predicate::str::contains("Planets"));
 }
 
 #[test]

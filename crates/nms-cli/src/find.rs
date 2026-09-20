@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use nms_core::biome::Biome;
 use nms_query::display::format_find_results;
-use nms_query::find::{FindQuery, ReferencePoint, execute_find};
+use nms_query::find::{FindQuery, FindSort, ReferencePoint, execute_find};
 use nms_query::theme::{Theme, should_use_colors};
 
 /// Arguments for the find command.
@@ -17,6 +17,7 @@ pub struct FindArgs {
     pub named: bool,
     pub discoverer: Option<String>,
     pub from: Option<String>,
+    pub sort: String,
 }
 
 pub fn run(args: FindArgs) -> Result<(), Box<dyn std::error::Error>> {
@@ -56,6 +57,7 @@ pub fn run(args: FindArgs) -> Result<(), Box<dyn std::error::Error>> {
         discoverer: args.discoverer,
         named_only: args.named,
         from: reference,
+        sort: FindSort::parse(&args.sort)?,
     };
 
     let results = execute_find(&model, &query)?;

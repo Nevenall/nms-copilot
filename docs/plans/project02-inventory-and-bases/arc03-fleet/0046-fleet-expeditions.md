@@ -2,7 +2,7 @@
 
 Report on frigate fleet expeditions: what each running expedition is doing, whether a frigate is waiting for the player, roughly when it will finish, and when the Navigator will offer new expeditions.
 
-**Status:** implemented 2026-09-15 as `nms fleet [N | frigates]`, the REPL `fleet` command and alerts, and the `fleet_status` MCP tool. Drafted 2026-09-14 against a real save with one running expedition (Diplomacy, Very Long, five frigates, 16 of 18 events resolved, an intervention call pending) and a fleet of 25 frigates; the in-game checks below were run the same day and every decode rule the code depends on is `verified` in the reference notes. The one departure from the design below: the command-room count is taken straight from the freighter base's objects in the save conversion rather than as a field on `BaseObjects`.
+**Status:** implemented 2026-09-15 as `nms fleet [N | frigates]`, the REPL `fleet` command and alerts, and the `fleet_status` MCP tool (`fleet frigates` became `list frigates` in 0050, beside a new `list expeditions`). Drafted 2026-09-14 against a real save with one running expedition (Diplomacy, Very Long, five frigates, 16 of 18 events resolved, an intervention call pending) and a fleet of 25 frigates; the in-game checks below were run the same day and every decode rule the code depends on is `verified` in the reference notes. The one departure from the design below: the command-room count is taken straight from the freighter base's objects in the save conversion rather than as a field on `BaseObjects`.
 
 **Depends on:** nothing new. The address decoder and the `now`-as-parameter pattern from arc 02 carry over.
 

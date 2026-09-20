@@ -306,9 +306,9 @@ fn main() {
 /// The reminder printed on dropping to the prompt, saying how to get back.
 fn prompt_hint(dashboard_home: bool, color: bool) -> String {
     let text = if dashboard_home {
-        "  An empty line or \"dash\" returns to the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
+        "  An empty line or \"dashboard\" returns to the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
     } else {
-        "  \"dash\" opens the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
+        "  \"dashboard\" opens the dashboard \u{00B7} \"help\" lists commands \u{00B7} \"exit\" quits"
     };
     if color {
         nms_query::theme::Theme::default_dark().muted.paint(text)
@@ -360,7 +360,7 @@ fn run_prompt(
                 }
                 match commands::parse_line(&line) {
                     Ok(Some(Action::Exit | Action::Quit)) => return PromptExit::Quit,
-                    Ok(Some(Action::Dash)) => return PromptExit::Dashboard,
+                    Ok(Some(Action::Dashboard)) => return PromptExit::Dashboard,
                     Ok(Some(Action::Map)) => {
                         let guard = model.blocking_read();
                         if let Err(e) = nms_copilot::map::run_map(&guard, session) {
@@ -977,11 +977,11 @@ mod tests {
     fn test_prompt_hint_says_how_to_get_back() {
         let home = prompt_hint(true, false);
         assert!(
-            home.contains("empty line or \"dash\" returns to the dashboard"),
+            home.contains("empty line or \"dashboard\" returns to the dashboard"),
             "{home}"
         );
         let away = prompt_hint(false, false);
-        assert!(away.contains("\"dash\" opens the dashboard"), "{away}");
+        assert!(away.contains("\"dashboard\" opens the dashboard"), "{away}");
         assert!(!away.contains("empty line"), "{away}");
         assert!(
             prompt_hint(true, true).contains("\x1b["),

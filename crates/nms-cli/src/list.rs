@@ -8,9 +8,12 @@ use nms_core::galaxy::{Galaxy, GalaxyType};
 use nms_core::glyph::GLYPH_TABLE;
 use nms_graph::GalaxyModel;
 use nms_query::display::{
-    format_exocraft, format_items, format_multitools, format_ships, hex_to_emoji,
+    format_exocraft, format_expeditions, format_frigates, format_items, format_multitools,
+    format_ships, hex_to_emoji,
 };
+use nms_query::fleet::execute_fleet;
 use nms_query::inventory::{ListItemsQuery, execute_exocraft, execute_list_items, holdings};
+use nms_query::saves::format_save_slots;
 use nms_query::table::{Builder, build_table, nms_theme};
 use nms_query::theme::{Theme, should_use_colors};
 
@@ -28,7 +31,7 @@ pub fn run(
         ListTargetCmd::TerrainTypes => list_terrain_types(),
         ListTargetCmd::Bases { limit, all } => list_bases(save, slot, limit, all),
         ListTargetCmd::Systems { limit, all } => list_systems(save, slot, limit, all),
-        ListTargetCmd::Items { kind, min, pattern } => list_items(save, slot, kind, min, pattern),
+        ListTargetCmd::Items { kind, min } => list_items(save, slot, kind, min),
         ListTargetCmd::Ships => list_owned(save, slot, |model, theme| {
             Ok(format_ships(&holdings(model)?.ships, theme))
         }),
@@ -38,6 +41,22 @@ pub fn run(
         ListTargetCmd::Multitools => list_owned(save, slot, |model, theme| {
             Ok(format_multitools(&holdings(model)?.multitools, theme))
         }),
+        ListTargetCmd::Frigates => list_owned(save, slot, |model, theme| {
+            Ok(format_frigates(
+                &execute_fleet(model, crate::base::unix_now())?,
+                theme,
+            ))
+        }),
+        ListTargetCmd::Expeditions => list_owned(save, slot, |model, theme| {
+            Ok(format_expeditions(
+                &execute_fleet(model, crate::base::unix_now())?,
+                theme,
+            ))
+        }),
+        ListTargetCmd::Saves => {
+            print!("{}", format_save_slots(&nms_theme())?);
+            Ok(())
+        }
     }
 }
 
@@ -54,12 +73,10 @@ fn list_items(
     slot: Option<u8>,
     kind: Option<String>,
     min: u32,
-    pattern: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let query = ListItemsQuery {
         kind: crate::inventory::parse_kind(kind)?,
         min_amount: min,
-        pattern,
     };
     let model = load_model(save, slot)?;
     let items = execute_list_items(&model, &query)?;

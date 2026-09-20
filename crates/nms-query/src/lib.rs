@@ -5,11 +5,14 @@
 
 pub mod base;
 pub mod display;
+pub mod export;
 pub mod find;
 pub mod fleet;
 pub mod inventory;
 pub mod layout;
+pub mod raw;
 pub mod route;
+pub mod saves;
 pub mod show;
 pub mod stats;
 pub mod table;
@@ -21,14 +24,16 @@ pub use base::{
 };
 pub use display::{
     format_alert_indicator, format_alert_line, format_base_detail, format_base_overview,
-    format_clock, format_distance, format_duration, format_expedition_detail, format_find_results,
-    format_fleet, format_fleet_overview, format_frigates, format_navigator_line, format_route,
-    format_show_result, format_snapshot, format_stats, hex_to_emoji,
+    format_clock, format_distance, format_duration, format_expedition_detail, format_expeditions,
+    format_find_results, format_fleet, format_fleet_overview, format_frigates,
+    format_navigator_line, format_route, format_show_system, format_snapshot, format_stats,
+    hex_to_emoji,
 };
 pub use display::{
     format_exocraft, format_have, format_inventory, format_items, format_multitools, format_ships,
 };
-pub use find::{FindQuery, FindResult, ReferencePoint};
+pub use export::{ExportFormat, ExportRecord, render_export};
+pub use find::{FindQuery, FindResult, FindSort, ReferencePoint};
 pub use fleet::{
     ExpeditionRow, FleetStatus, FleetTarget, FrigateRow, OfferStatus, execute_fleet, fleet_alerts,
 };
@@ -38,7 +43,9 @@ pub use inventory::{
     holdings_summary,
 };
 pub use layout::terminal_width;
+pub use raw::{RawQuery, format_raw};
 pub use route::{RouteFrom, RouteQuery, RouteResult, TargetSelection};
-pub use show::{ShowQuery, ShowResult};
+pub use saves::format_save_slots;
+pub use show::{ShowSystemResult, show_system};
 pub use stats::{StatsQuery, StatsResult};
 pub use theme::{Theme, should_use_colors};

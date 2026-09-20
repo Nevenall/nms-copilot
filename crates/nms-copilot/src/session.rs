@@ -280,17 +280,9 @@ impl SessionState {
     }
 
     /// Format the current session state for display.
-    pub fn format_status(&self) -> String {
+    /// What bare `set` prints: everything `set`, `reset`, and `backup on|off` control.
+    pub fn format_settings(&self) -> String {
         let mut lines = Vec::new();
-
-        lines.push(format!(
-            "Galaxy:      {} ({})",
-            self.galaxy.name, self.galaxy.galaxy_type
-        ));
-        lines.push(format!(
-            "Model:       {} systems, {} planets",
-            self.system_count, self.planet_count
-        ));
 
         match &self.position {
             Some(pos) => lines.push(format!("Position:    {}", pos.label())),
@@ -315,15 +307,18 @@ impl SessionState {
             None => lines.push("Backups:     (not configured)".into()),
         }
 
-        if self.alerts.is_empty() {
-            lines.push("Alerts:      (none)".into());
-        } else {
-            lines.push("Alerts:".into());
-            for alert in &self.alerts {
-                lines.push(format!("  {}", alert.text()));
-            }
-        }
+        lines.join("\n") + "\n"
+    }
 
+    /// The current alerts as `info` prints them: one line, or one per alert.
+    pub fn format_alerts(&self) -> String {
+        if self.alerts.is_empty() {
+            return "Alerts:      (none)\n".into();
+        }
+        let mut lines = vec!["Alerts:".to_string()];
+        for alert in &self.alerts {
+            lines.push(format!("  {}", alert.text()));
+        }
         lines.join("\n") + "\n"
     }
 }
@@ -422,12 +417,15 @@ mod tests {
     }
 
     #[test]
-    fn test_format_status() {
+    fn test_format_settings() {
         let model = test_model();
         let session = SessionState::from_model(&model);
-        let output = session.format_status();
-        assert!(output.contains("Euclid"));
-        assert!(output.contains("systems"));
+        let output = session.format_settings();
+        assert!(output.contains("Position:"));
+        assert!(output.contains("Biome:       (none)"));
+        assert!(output.contains("Warp range:  (none)"));
+        assert!(output.contains("Backups:     (not configured)"));
+        assert!(!output.contains("Alerts"), "alerts are info's, not set's");
     }
 
     #[test]
@@ -508,7 +506,7 @@ mod tests {
 
         assert!(session.refresh_alerts(&model, snapshot).is_empty());
         assert_eq!(session.alert_indicator(), "");
-        assert!(session.format_status().contains("Alerts:      (none)"));
+        assert!(session.format_alerts().contains("Alerts:      (none)"));
 
         let notices = session.refresh_alerts(&model, snapshot + 600);
         assert_eq!(notices, vec!["Farm: 1 Frost Crystal ready".to_string()]);
@@ -519,7 +517,7 @@ mod tests {
         assert_eq!(session.alert_indicator(), "\u{1F331} 1 ready");
         assert!(
             session
-                .format_status()
+                .format_alerts()
                 .contains("Farm: 1 Frost Crystal ready")
         );
         assert_eq!(

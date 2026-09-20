@@ -75,13 +75,14 @@ fn dispatch_convert_glyphs() {
 }
 
 #[test]
-fn dispatch_show_base() {
+fn dispatch_base_by_name() {
     let (model, mut session) = setup();
-    let action = nms_copilot::commands::parse_line("show base \"Test Base\"")
+    let action = nms_copilot::commands::parse_line("base \"Test Base\"")
         .unwrap()
         .unwrap();
     let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
     assert!(output.contains("Test Base"));
+    assert!(output.contains("Portal Glyphs"));
 }
 
 #[test]
@@ -96,14 +97,40 @@ fn dispatch_set_biome_filter() {
 }
 
 #[test]
-fn dispatch_status_shows_state() {
+fn dispatch_bare_set_shows_settings_and_info_shows_alerts() {
     let (model, mut session) = setup();
-    let action = nms_copilot::commands::parse_line("status")
+    let action = nms_copilot::commands::parse_line("set").unwrap().unwrap();
+    let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
+    assert!(output.contains("Position:"));
+    assert!(output.contains("Warp range:"));
+    assert!(!output.contains("Alerts"));
+    let action = nms_copilot::commands::parse_line("info").unwrap().unwrap();
+    let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
+    assert!(output.contains("Euclid"));
+    assert!(output.contains("Alerts:"));
+}
+
+#[test]
+fn dispatch_export_and_raw() {
+    let (model, mut session) = setup();
+    let action = nms_copilot::commands::parse_line("export --format csv")
         .unwrap()
         .unwrap();
     let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
-    assert!(output.contains("Euclid"));
-    assert!(output.contains("Position:"));
+    assert!(output.starts_with("planet_name,"), "{output}");
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("out.json");
+    let action = nms_copilot::commands::parse_line(&format!("export --to \"{}\"", file.display()))
+        .unwrap()
+        .unwrap();
+    let output = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap();
+    assert!(output.starts_with("Wrote "), "{output}");
+    assert!(std::fs::read_to_string(&file).unwrap().starts_with('['));
+    let action = nms_copilot::commands::parse_line("raw --keys")
+        .unwrap()
+        .unwrap();
+    let err = nms_copilot::dispatch::dispatch(&action, &model, &mut session).unwrap_err();
+    assert!(err.contains("save.hg"), "no followed save file: {err}");
 }
 
 #[test]
@@ -272,11 +299,11 @@ mod backup {
             false,
             None,
         );
-        assert!(session.format_status().contains("Backups:     off"));
+        assert!(session.format_settings().contains("Backups:     off"));
         let out = run("backup on", &model, &mut session).unwrap();
         assert!(out.contains("on"));
         assert!(session.backup_enabled);
-        assert!(session.format_status().contains("Backups:     on"));
+        assert!(session.format_settings().contains("Backups:     on"));
         let out = run("backup off", &model, &mut session).unwrap();
         assert!(out.contains("off"));
         assert!(!session.backup_enabled);

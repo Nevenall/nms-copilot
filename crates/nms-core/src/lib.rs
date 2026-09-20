@@ -38,4 +38,4 @@ pub use holdings::{
 };
 pub use items::ItemInfo;
 pub use player::{BaseType, BaseTypeParseError, PlayerBase, PlayerState};
-pub use system::{Planet, System, SystemId};
+pub use system::{Planet, Scanned, System, SystemId};

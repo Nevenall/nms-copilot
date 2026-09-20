@@ -63,7 +63,6 @@ pub enum InventoryResult {
 pub struct ListItemsQuery {
     pub kind: Option<ItemKind>,
     pub min_amount: u32,
-    pub pattern: Option<String>,
 }
 
 /// One item's total across every grid.
@@ -183,11 +182,6 @@ pub fn execute_list_items(
     let mut totals: BTreeMap<ItemId, (ItemTotal, Vec<ContainerKind>)> = BTreeMap::new();
     for (container, stack) in holdings.stacks() {
         if query.kind.is_some() && stack.kind != query.kind {
-            continue;
-        }
-        if let Some(pattern) = query.pattern.as_deref()
-            && !stack.id.matches(pattern)
-        {
             continue;
         }
         let (entry, kinds) = totals.entry(stack.id.clone()).or_insert_with(|| {
@@ -532,7 +526,6 @@ mod tests {
             &ListItemsQuery {
                 kind: None,
                 min_amount: 100,
-                pattern: None,
             },
         )
         .unwrap();
@@ -542,7 +535,6 @@ mod tests {
             &ListItemsQuery {
                 kind: Some(ItemKind::Technology),
                 min_amount: 0,
-                pattern: None,
             },
         )
         .unwrap();

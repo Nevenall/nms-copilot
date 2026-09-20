@@ -61,6 +61,33 @@ impl System {
     }
 }
 
+/// What the player has scanned on a planet: one discovery record per species, plant, or mineral. The planet's totals are not in the save, so these say how much is recorded, not how much is left.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct Scanned {
+    pub fauna: u16,
+    pub flora: u16,
+    pub minerals: u16,
+}
+
+impl Scanned {
+    pub fn new(fauna: u16, flora: u16, minerals: u16) -> Self {
+        Self {
+            fauna,
+            flora,
+            minerals,
+        }
+    }
+
+    /// Nothing recorded at all.
+    pub fn is_empty(&self) -> bool {
+        self.fauna == 0 && self.flora == 0 && self.minerals == 0
+    }
+}
+
 /// A planet within a star system.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
@@ -78,6 +105,8 @@ pub struct Planet {
     pub name: Option<String>,
     /// Procedural generation seed.
     pub seed_hash: Option<u64>,
+    /// Species, plants, and minerals the player has recorded here.
+    pub scanned: Scanned,
 }
 
 impl Planet {
@@ -96,7 +125,14 @@ impl Planet {
             infested,
             name,
             seed_hash,
+            scanned: Scanned::default(),
         }
+    }
+
+    /// The same planet with its scanned counts set.
+    pub fn with_scanned(mut self, scanned: Scanned) -> Self {
+        self.scanned = scanned;
+        self
     }
 }
 

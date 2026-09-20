@@ -45,7 +45,7 @@ Use `--headless` to run just the MCP server without the REPL (e.g., for Claude D
 ## Features
 
 - **Native save file parsing** -- reads `save.hg` directly (LZ4 block decompression + JSON key deobfuscation), no export step needed
-- **Planet search** -- find planets by biome, distance, discoverer, infested status, or any combination
+- **Planet search** -- find planets by biome, distance, discoverer, infested status, or any combination, or by how many species, plants, and minerals you have recorded there
 - **Route planning** -- nearest-neighbor and 2-opt TSP solvers with warp-range hop constraints
 - **Portal glyph converter** -- fully multidirectional: hex, emoji, coordinates, signal booster, galactic address
 - **Interactive galaxy map** -- full-screen TUI with galaxy, region, and local zoom levels
@@ -125,7 +125,10 @@ nms find --biome Barren --within 100000        # within 100K ly
 nms find --biome Lava --nearest 5              # 5 closest lava planets
 nms find --biome Swamp --from "Sealab 2038"   # distance from a named base
 nms find --named --discoverer oubiwann         # your named discoveries
+nms find --sort fauna --nearest 10             # the 10 planets with the most species recorded
 ```
+
+Every row shows how many species, plants, and minerals you have recorded on the planet (`Fauna`, `Flora`, `Min.`), counted from the discovery records in the save. `--sort fauna | flora | minerals` puts the most recorded first, then nearest, which is the way to find the planets closest to a complete catalogue for the discovery bonus; the save does not hold a planet's total, so it cannot say how many are left. `show system` prints the same three columns per planet, and `export` carries them as `fauna_scanned`, `flora_scanned`, and `minerals_scanned`.
 
 ### Route Planning
 
@@ -145,13 +148,11 @@ nms route --round-trip                           # return to start
 ```bash
 nms info                              # save overview, player location, discovery counts
 nms show system 369                   # system details + all planets
-nms show base "Acadia National Park"  # base details with portal glyphs
 nms base                              # every base: crops ready, extraction fill, power
-nms base "Farm"                       # one base: crops by type, extraction by pipe network, power
+nms base "Farm"                       # one base: location and glyphs, crops by type, extraction by pipe network, power
 nms base "Farm" --width 160           # lay the sections out side by side at this width (default: terminal width)
 nms fleet                             # frigate expeditions: waiting for you, returned, or under way; the Navigator's offers left
 nms fleet 1                           # one expedition: its frigates and the event log
-nms fleet frigates                    # every frigate: class, grade, stats, modules, and whether it is out
 nms have gold                         # do I have it, how much, and in which container, reachable from where
 nms have gas --type substance         # several matches, one block each; --type substance | product | technology
 nms inventory                         # every container: class, used of unlocked slots, free, reachable from
@@ -159,8 +160,9 @@ nms inventory --free                  # most free slots first
 nms inventory storage 3               # one container's contents; a word like "ship" lists every matching grid
 nms stats --biomes                    # biome distribution table
 nms stats --discoveries               # discovery counts by type
-nms saves                             # list all save slots
 ```
+
+The grammar is the same everywhere: verbs for the atlas (`find`, `show system`, `list <plural>`, `route`, `convert`, `export`, `import`, `raw`, `backup`), and a domain noun whose bare form is the overview and whose argument is one thing in full (`base` / `base "Farm"`, `fleet` / `fleet 2`, `inventory` / `inventory "storage 3"`). Every collection is a `list` target, including the frigates, the expeditions, and the save slots; `have` is the one by-name item question.
 
 `have` matches item names and the game's internal IDs (`have asteroid2` finds Gold), totals across every grid, and lists each stack with the bases a storage container can be opened from. Names come from a bundled table generated from the [AssistantNMS API](https://api.nmsassistant.com) by `scripts/gen-items.py`; an ID the table does not know is shown as itself. Free space is the unlocked slots minus the occupied ones, so a cargo grid nothing has been bought for reports nothing rather than an empty 7×5. Technology slots hold charge, not a count, and are never totalled.
 
@@ -193,6 +195,7 @@ nms convert --voxel 100,50,-200 --ssi 42           # voxel coordinates
 ```bash
 nms export --format json                          # export all planets as JSON
 nms export --biome Lush --format csv              # export filtered planets as CSV
+nms export --format csv --to planets.csv          # write to a file instead of standard output
 nms import community_data.csv --source "NMSCE"    # import community coordinates
 ```
 
@@ -214,6 +217,9 @@ nms list items --min 1000 --type substance
 nms list ships                         # type, class, slots, installed tech, class bonuses; the primary marked
 nms list exocraft                      # each exocraft and the base it is parked at
 nms list multitools                    # class, slots, installed tech, bonuses; the equipped one marked
+nms list frigates                      # every frigate: class, grade, stats, traits, and whether it is out
+nms list expeditions                   # the running expeditions, one row each
+nms list saves                         # every save slot of every account
 ```
 
 ### Shell Completions
@@ -303,23 +309,21 @@ nms-copilot
   (opens full-screen interactive galaxy map with zoom levels)
 ```
 
-Commands at the prompt beyond the CLI's, and the CLI commands that gain completion or alerts there:
+Every CLI command works at the prompt with the same words (`raw` re-reads the followed save file; `export --to FILE` writes a file and prints without it). The prompt adds:
 
 | Command | Description |
 |---------|-------------|
+| `set` | Show the session settings: position, biome filter, warp range, backups |
 | `set position <base>` | Set reference position for distance calculations |
-| `set biome <biome>` | Set default biome filter for find/route |
+| `set biome <biome>` | Set default biome filter for find/route/export |
 | `set warp-range <ly>` | Set default warp range for route planning |
 | `reset [position\|biome\|warp-range\|all]` | Reset session state |
-| `status` | Show current session state and base and fleet alerts |
-| `base [name] [--width N]` | Every base's crops, extraction, and power, or one base in full |
-| `fleet [N\|frigates]` | Frigate expeditions, one expedition in full, or every frigate |
-| `have <item> [--type T]` | Do I have it, how much, and where; completes item names |
-| `inventory [container] [--free]` | Every container and how full it is, or one container's contents |
-| `backup [--label L]` | Snapshot the save now |
-| `backup on\|off\|list` | Automatic snapshots for this session, or what is kept |
+| `info` | The loaded model, your position, and the current base and fleet alerts |
+| `backup on\|off` | Automatic snapshots for this session (`backup`, `backup list`, and `backup prune` work as on the CLI) |
 | `map` | Interactive galaxy map (galaxy/region/local zoom) |
-| `dash` | Return to the dashboard (an empty line does the same) |
+| `dashboard` | Return to the dashboard (`dash` and an empty line do the same) |
+
+`have` completes item names, `inventory` container labels, `base` and `set position` base names, and `show system` system names.
 
 ### Dashboard
 
@@ -363,11 +367,11 @@ The dashboard is drawn in the terminal's own buffer, not a separate screen, and 
 ```
  NMS Copilot   Euclid · at Base Ferox · save 21:14 (10m ago) · watching slot 1                     q quit  : prompt
    ... dashboard ...
-  An empty line or "dash" returns to the dashboard · "help" lists commands · "exit" quits
+  An empty line or "dashboard" returns to the dashboard · "help" lists commands · "exit" quits
 [Euclid | 644 planets] 🚀 fleet 1
 ```
 
-An empty line or `dash` returns to the dashboard, which is redrawn at the top of a blank screen with everything before it kept in the scrollback. `exit` and `quit` end the program from either mode. `nms-copilot --prompt` starts at the prompt instead, as does `start = false` in the config; then an empty line stays at the prompt and only `dash` opens the dashboard.
+An empty line or `dashboard` (or its alias `dash`) returns to the dashboard, which is redrawn at the top of a blank screen with everything before it kept in the scrollback. `exit` and `quit` end the program from either mode. `nms-copilot --prompt` starts at the prompt instead, as does `start = false` in the config; then an empty line stays at the prompt and only `dashboard` opens the dashboard.
 
 ```toml
 [dashboard]
@@ -429,7 +433,7 @@ nms-copilot --headless                           # stdio transport
 nms-copilot --headless --http 127.0.0.1:3000    # HTTP transport
 ```
 
-The MCP server exposes all query capabilities as tools — your AI copilot can search planets, plan routes, convert coordinates, track your position as you play, check which crops are ready and how full your supply depots are (`base_status`), see whether a frigate is waiting for your decision or an expedition is back (`fleet_status`), and answer "do I have gold and where is it" (`have_item`, `inventory_summary`, `list_ships`). `show_system` carries the region, the generated name, and the hover properties when the `nms_namegen` tool is installed.
+The MCP server exposes the same queries as tools, named after the command words: `find_planets`, `plan_route`, `player_position`, `nearby_planets`, `show_system`, `base_status` (every base, or one by name with its glyphs, crops, depots, and power), `fleet_status`, `have_item`, `inventory`, `list_ships`, `convert_coordinates`, and `galaxy_stats`. `show_system` carries the region, the generated name, and the hover properties when the `nms_namegen` tool is installed.
 
 ---
 

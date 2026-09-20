@@ -6,7 +6,7 @@ This file provides guidance to LLM-based coding agents when working with code in
 
 NMS Copilot is a real-time galactic copilot for No Man's Sky, built in Rust. It reads NMS save files (raw binary `save.hg` or exported JSON), builds a live in-memory model of discovered systems/planets/bases, and exposes it through three interfaces: a one-shot CLI (`nms`), an interactive REPL (`nms-copilot`), and an MCP server (`nms-mcp`). It is **not** a save editor — it is a queryable atlas.
 
-**Status:** All 7 phases complete. Core types (`nms-core`), binary save parser (`nms-save`), galaxy model with multi-galaxy routing (`nms-graph`), query engine with color themes (`nms-query`), CLI (`nms-cli`) with `info`, `convert`, `find`, `show`, `base`, `fleet`, `have`, `inventory`, `stats`, `route`, `export`, `import`, `saves`, `backup`, `raw`, `list`, and `completions` commands, interactive REPL (`nms-copilot`), MCP server (`nms-mcp`) with stdio and HTTP transports, live file watching, and rkyv cache are implemented and tested (1060 tests).
+**Status:** All 7 phases complete. Core types (`nms-core`), binary save parser (`nms-save`), galaxy model with multi-galaxy routing (`nms-graph`), query engine with color themes (`nms-query`), CLI (`nms-cli`) with `info`, `convert`, `find`, `show system`, `base`, `fleet`, `have`, `inventory`, `stats`, `route`, `export`, `import`, `backup`, `raw`, `list` (reference data, atlas contents, holdings, frigates, expeditions, save slots), and `completions` commands, interactive REPL (`nms-copilot`) with the same words plus `set`, `reset`, `map`, and `dashboard`, MCP server (`nms-mcp`) with stdio and HTTP transports and tools named after the command words, live file watching, and rkyv cache are implemented and tested (1065 tests). The grammar the words follow is in `docs/plans/project03-save-tooling/0050-command-words.md`.
 
 ## Document Hierarchy
 
@@ -24,7 +24,7 @@ repository.
 Plans live under `docs/plans/`, one numbered document per feature, each opening with a **Status** line that says when and on which branch it was implemented and how the result departs from the design. Each project directory has a `README.md` index with the status of its arcs:
 
 - `docs/plans/project02-inventory-and-bases/` — inventory (0044), crops and supply depots (0045), fleet expeditions (0046); all implemented.
-- `docs/plans/project03-save-tooling/` — save backups (0047), dashboard (0048), generated galaxy names and properties (0049); all implemented.
+- `docs/plans/project03-save-tooling/` — save backups (0047), dashboard (0048), generated galaxy names and properties (0049), command words (0050), scanned counts per planet (0051); all implemented.
 
 A new feature gets the next number and a plan before the code; when the code lands, the plan's Status line is updated rather than the plan rewritten. Facts the plans rest on live in `docs/reference/` (see below); `docs/mcp-http.md` documents the MCP HTTP transport. The upstream project's ODM design documents (`crates/design/`) were never part of this fork's tree.
 

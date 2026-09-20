@@ -2156,7 +2156,6 @@ dependencies = [
  "assert_cmd",
  "clap",
  "clap_complete",
- "csv",
  "nms-core",
  "nms-graph",
  "nms-namegen",
@@ -2164,7 +2163,6 @@ dependencies = [
  "nms-save",
  "oxur-cli",
  "predicates",
- "serde",
  "serde_json",
  "tempfile",
 ]
@@ -2256,12 +2254,15 @@ name = "nms-query"
 version = "0.3.0"
 dependencies = [
  "chrono",
+ "csv",
  "nms-core",
  "nms-graph",
  "nms-save",
  "oxur-cli",
+ "serde",
  "serde_json",
  "tabled",
+ "tempfile",
  "terminal_size 0.4.4",
  "toml 1.1.6+spec-1.1.0",
  "unicode-width 0.2.2",

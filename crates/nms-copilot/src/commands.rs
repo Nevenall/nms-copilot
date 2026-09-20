@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 ///
 /// This is separate from the CLI parser because:
 /// - No `--save` flag (the model is already loaded)
-/// - Extra REPL-only commands (exit, help, status, set, reset)
+/// - Extra REPL-only commands (exit, help, set, reset, map, dashboard)
 /// - Parsed from user input line, not process args
 #[derive(Parser, Debug)]
 #[command(
@@ -51,9 +51,13 @@ pub enum Action {
         /// Distance from this base name (default: current position).
         #[arg(long)]
         from: Option<String>,
+
+        /// Order: distance (default), or fauna, flora, minerals for the most recorded first; then --nearest N keeps the top N.
+        #[arg(long, default_value = "distance")]
+        sort: String,
     },
 
-    /// Show detailed information about a system or base.
+    /// Show one system in detail: planets, address, and what the generator says about it.
     Show {
         #[command(subcommand)]
         target: ShowTarget,
@@ -69,9 +73,9 @@ pub enum Action {
         width: Option<usize>,
     },
 
-    /// Show frigate expeditions, the Navigator's offers, and the fleet.
+    /// Show frigate expeditions and the Navigator's offers, or one expedition in full.
     Fleet {
-        /// An expedition number for the full view, or "frigates" for every frigate. Omit for the overview.
+        /// An expedition number for the full view. Omit for the overview; the frigates are `list frigates`.
         target: Option<String>,
     },
 
@@ -173,10 +177,10 @@ pub enum Action {
         round_trip: bool,
     },
 
-    /// Set session context (position, biome filter, warp range).
+    /// Set session context (position, biome filter, warp range), or show it when given nothing.
     Set {
         #[command(subcommand)]
-        target: SetTarget,
+        target: Option<SetTarget>,
     },
 
     /// Reset session state.
@@ -196,22 +200,89 @@ pub enum Action {
     Map,
 
     /// Return to the dashboard.
-    Dash,
+    #[command(alias = "dash")]
+    Dashboard,
 
-    /// Snapshot the save now, turn automatic snapshots on or off, or list what is kept.
+    /// Snapshot the save now, turn automatic snapshots on or off, list what is kept, or prune old snapshots.
     Backup {
-        /// "on", "off", or "list"; omit to take a snapshot now.
+        /// "on", "off", "list", or "prune"; omit to take a snapshot now.
         action: Option<String>,
 
         /// Label for a snapshot taken now; labelled snapshots are never pruned.
         #[arg(long)]
         label: Option<String>,
+
+        /// With "prune": snapshots to keep per slot; 0 keeps everything.
+        #[arg(long, default_value = "20")]
+        keep: usize,
     },
 
-    /// Show current session state.
-    Status,
+    /// Export the planets a find would match, as JSON or CSV, to a file or the terminal.
+    Export {
+        /// Filter by biome (e.g., Lush, Toxic, Scorched).
+        #[arg(long)]
+        biome: Option<String>,
 
-    /// Display save file summary.
+        /// Only infested planets.
+        #[arg(long)]
+        infested: bool,
+
+        /// Only within this radius in light-years.
+        #[arg(long)]
+        within: Option<f64>,
+
+        /// Only the N nearest results.
+        #[arg(long)]
+        nearest: Option<usize>,
+
+        /// Only named planets/systems.
+        #[arg(long)]
+        named: bool,
+
+        /// Filter by discoverer username (substring match).
+        #[arg(long)]
+        discoverer: Option<String>,
+
+        /// Distance from this base name (default: current position).
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Order: distance (default), or fauna, flora, minerals for the most recorded first.
+        #[arg(long, default_value = "distance")]
+        sort: String,
+
+        /// Output format: json, csv (default: json).
+        #[arg(long, default_value = "json")]
+        format: String,
+
+        /// Write to this file; omit to print.
+        #[arg(long, value_name = "FILE")]
+        to: Option<String>,
+    },
+
+    /// Print any part of the decoded save as JSON, re-read from the followed save file.
+    Raw {
+        /// Dotted path from the save root, e.g. BaseContext.PlayerStateData.FleetExpeditions[0].Events (omit for the root).
+        path: Option<String>,
+
+        /// Levels of nesting to print below the target (0 = unlimited).
+        #[arg(long, default_value = "3")]
+        depth: usize,
+
+        /// Array items to print per array (0 = unlimited).
+        #[arg(long, default_value = "10")]
+        limit: usize,
+
+        /// List the keys at the target with their types and sizes instead of printing it.
+        #[arg(long)]
+        keys: bool,
+
+        /// Search key names below the target for this text (case-insensitive) and print where they occur.
+        #[arg(long)]
+        find: Option<String>,
+    },
+
+    /// The loaded model, your position, and the current base and fleet alerts.
     Info,
 
     /// Show help for REPL commands.
@@ -279,7 +350,7 @@ pub enum ListTarget {
     /// List terrain generation types (GcBiomeSubType).
     #[command(name = "terrain-types")]
     TerrainTypes,
-    /// List every item you hold with its total across all containers.
+    /// List every item you hold with its total across all containers. One item by name is `have <item>`.
     Items {
         /// Only items of this type: substance, product, or technology.
         #[arg(long = "type")]
@@ -288,9 +359,6 @@ pub enum ListTarget {
         /// Only items with at least this many.
         #[arg(long, default_value = "0")]
         min: u32,
-
-        /// Only items whose name or ID contains this.
-        pattern: Option<String>,
     },
     /// List owned ships with type, class, slots, and bonuses.
     Ships,
@@ -298,18 +366,19 @@ pub enum ListTarget {
     Exocraft,
     /// List owned multi-tools with class, slots, and bonuses.
     Multitools,
+    /// List every frigate: class, grade, stats, traits, and whether it is out.
+    Frigates,
+    /// List the running expeditions, one row each.
+    Expeditions,
+    /// List every save slot of every account.
+    Saves,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ShowTarget {
-    /// Show system details.
+    /// Show system details. A base in full is `base <name>`.
     System {
         /// System name or hex address.
-        name: String,
-    },
-    /// Show base details.
-    Base {
-        /// Base name (case-insensitive).
         name: String,
     },
 }
@@ -419,18 +488,26 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_show_base_quoted() {
-        let action = parse_line("show base \"Acadia National Park\"")
+    fn test_parse_show_system_quoted() {
+        let action = parse_line("show system \"Gugestor Colony\"")
             .unwrap()
             .unwrap();
         match action {
             Action::Show {
-                target: ShowTarget::Base { name },
+                target: ShowTarget::System { name },
             } => {
-                assert_eq!(name, "Acadia National Park");
+                assert_eq!(name, "Gugestor Colony");
             }
-            _ => panic!("Expected Show Base"),
+            _ => panic!("Expected Show System"),
         }
+    }
+
+    #[test]
+    fn test_parse_show_base_is_refused() {
+        assert!(
+            parse_line("show base \"Acadia National Park\"").is_err(),
+            "a base in full is `base <name>`"
+        );
     }
 
     #[test]
@@ -446,8 +523,8 @@ mod tests {
 
     #[test]
     fn test_shell_words_quoted() {
-        let words = shell_words("show base \"My Base Name\"");
-        assert_eq!(words, vec!["show", "base", "My Base Name"]);
+        let words = shell_words("base \"My Base Name\"");
+        assert_eq!(words, vec!["base", "My Base Name"]);
     }
 
     #[test]
@@ -472,9 +549,17 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_status() {
-        let action = parse_line("status").unwrap().unwrap();
-        assert!(matches!(action, Action::Status));
+    fn test_parse_status_is_refused() {
+        assert!(
+            parse_line("status").is_err(),
+            "the session's settings are bare `set`; the alerts are in `info`"
+        );
+    }
+
+    #[test]
+    fn test_parse_bare_set_shows_settings() {
+        let action = parse_line("set").unwrap().unwrap();
+        assert!(matches!(action, Action::Set { target: None }));
     }
 
     #[test]
@@ -482,7 +567,7 @@ mod tests {
         let action = parse_line("set biome Lush").unwrap().unwrap();
         match action {
             Action::Set {
-                target: SetTarget::Biome { name },
+                target: Some(SetTarget::Biome { name }),
             } => assert_eq!(name, "Lush"),
             _ => panic!("Expected Set Biome"),
         }
@@ -493,7 +578,7 @@ mod tests {
         let action = parse_line("set position \"Home Base\"").unwrap().unwrap();
         match action {
             Action::Set {
-                target: SetTarget::Position { name },
+                target: Some(SetTarget::Position { name }),
             } => assert_eq!(name, "Home Base"),
             _ => panic!("Expected Set Position"),
         }
@@ -504,7 +589,7 @@ mod tests {
         let action = parse_line("set warp-range 2500").unwrap().unwrap();
         match action {
             Action::Set {
-                target: SetTarget::WarpRange { ly },
+                target: Some(SetTarget::WarpRange { ly }),
             } => assert_eq!(ly, 2500.0),
             _ => panic!("Expected Set WarpRange"),
         }
@@ -692,9 +777,35 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_dash() {
-        let action = parse_line("dash").unwrap().unwrap();
-        assert!(matches!(action, Action::Dash));
+    fn test_parse_dashboard_and_its_alias() {
+        assert!(matches!(
+            parse_line("dashboard").unwrap().unwrap(),
+            Action::Dashboard
+        ));
+        assert!(matches!(
+            parse_line("dash").unwrap().unwrap(),
+            Action::Dashboard
+        ));
+    }
+
+    #[test]
+    fn test_parse_export_and_raw() {
+        let action = parse_line("export --biome Lush --format csv --to planets.csv")
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(action, Action::Export { ref biome, ref format, ref to, .. } if biome.as_deref() == Some("Lush") && format == "csv" && to.as_deref() == Some("planets.csv"))
+        );
+        let action = parse_line("raw BaseContext.PlayerStateData --keys")
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(action, Action::Raw { ref path, keys: true, depth: 3, limit: 10, find: None } if path.as_deref() == Some("BaseContext.PlayerStateData"))
+        );
+        assert!(matches!(
+            parse_line("raw").unwrap().unwrap(),
+            Action::Raw { path: None, .. }
+        ));
     }
 
     #[test]
@@ -715,10 +826,31 @@ mod tests {
     fn test_parse_fleet_targets() {
         let action = parse_line("fleet").unwrap().unwrap();
         assert!(matches!(action, Action::Fleet { target: None }));
-        let action = parse_line("fleet frigates").unwrap().unwrap();
-        assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "frigates"));
         let action = parse_line("fleet 2").unwrap().unwrap();
         assert!(matches!(action, Action::Fleet { target: Some(ref t) } if t == "2"));
+    }
+
+    #[test]
+    fn test_parse_list_fleet_and_saves() {
+        assert!(matches!(
+            parse_line("list frigates").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Frigates
+            }
+        ));
+        assert!(matches!(
+            parse_line("list expeditions").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Expeditions
+            }
+        ));
+        assert!(matches!(
+            parse_line("list saves").unwrap().unwrap(),
+            Action::List {
+                target: ListTarget::Saves
+            }
+        ));
+        assert!(parse_line("saves").is_err(), "the slots are `list saves`");
     }
 
     #[test]
@@ -751,10 +883,13 @@ mod tests {
                 target: ListTarget::Items {
                     min: 100,
                     kind: Some(_),
-                    pattern: None
                 }
             }
         ));
+        assert!(
+            parse_line("list items gold").is_err(),
+            "one item by name is `have`"
+        );
         assert!(matches!(
             parse_line("list ships").unwrap().unwrap(),
             Action::List {
@@ -803,9 +938,13 @@ mod tests {
             parse_line("backup").unwrap().unwrap(),
             Action::Backup {
                 action: None,
-                label: None
+                label: None,
+                keep: 20
             }
         ));
+        assert!(
+            matches!(parse_line("backup prune --keep 5").unwrap().unwrap(), Action::Backup { action: Some(ref a), keep: 5, .. } if a == "prune")
+        );
         assert!(
             matches!(parse_line("backup on").unwrap().unwrap(), Action::Backup { action: Some(ref a), .. } if a == "on")
         );
@@ -816,7 +955,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(
-            matches!(labelled, Action::Backup { action: None, label: Some(ref l) } if l == "before call")
+            matches!(labelled, Action::Backup { action: None, label: Some(ref l), .. } if l == "before call")
         );
     }
 }

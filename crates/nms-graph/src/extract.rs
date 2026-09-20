@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
-use nms_core::system::{Planet, System};
+use nms_core::system::{Planet, Scanned, System};
 use nms_save::model::SaveRoot;
 
 use crate::spatial::SystemId;
@@ -236,6 +236,36 @@ pub fn extract_systems(save: &SaveRoot) -> HashMap<SystemId, System> {
         }
     }
 
+    // Scanned counts: one Animal, Flora, or Mineral record per thing recorded, at the
+    // planet's address. A record whose planet has no Planet record is dropped, since the
+    // atlas has nothing to hang it on.
+    let mut scanned: HashMap<(SystemId, u8), Scanned> = HashMap::new();
+    for rec in records {
+        let kind = rec.dd.dt.as_str();
+        if !matches!(kind, "Animal" | "Flora" | "Mineral") {
+            continue;
+        }
+        let addr = rec
+            .dd
+            .ua
+            .to_galactic_address(record_galaxy(rec, &real_galaxies));
+        let entry = scanned
+            .entry((SystemId::from_address(&addr), addr.planet_index()))
+            .or_default();
+        match kind {
+            "Animal" => entry.fauna = entry.fauna.saturating_add(1),
+            "Flora" => entry.flora = entry.flora.saturating_add(1),
+            _ => entry.minerals = entry.minerals.saturating_add(1),
+        }
+    }
+    for (sys_id, builder) in builders.iter_mut() {
+        for planet in builder.planets.iter_mut() {
+            if let Some(counts) = scanned.get(&(*sys_id, planet.index)) {
+                planet.scanned = *counts;
+            }
+        }
+    }
+
     // Third pass: fill in generated system names from space station teleporter
     // endpoints. A station is named after its system ("Atlasa Stellar Observer"),
     // and the endpoint list is the only place the save records a generated name.
@@ -388,6 +418,13 @@ mod tests {
                     "Store": {"Record": [
                         {"DD": {"UA": 606934656187883, "DT": "SolarSystem", "VP": ["0x77C0A655CCBDA20F"]}, "DM": {"CN": "Best Rest"}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
                         {"DD": {"UA": 606934656187883, "DT": "Planet", "VP": ["0x1234", 6]}, "DM": {"CN": "Rest Stop"}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Animal", "VP": ["0x1", "0x2", "0x3", "0x4"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Animal", "VP": ["0x5", "0x6", "0x7", "0x8"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Flora", "VP": ["0x9", "0xA"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Mineral", "VP": ["0xB", "0xC"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Mineral", "VP": ["0xD", "0xE"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 606934656187883, "DT": "Mineral", "VP": ["0xF", "0x10"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
+                        {"DD": {"UA": 5110534283558379, "DT": "Animal", "VP": ["0x11", "0x12", "0x13", "0x14"]}, "DM": {}, "OWS": {"UID": "1", "USN": "Santa", "PTK": "ST", "TS": 1471091917}, "FL": {"C": 1}},
                         {"DD": {"UA": 498082938293634, "DT": "SolarSystem", "VP": ["0xD9F543C64FB79748"]}, "DM": {}, "OWS": {"UID": "2", "USN": "Someone", "PTK": "ST", "TS": 1756915149}, "FL": {"C": 1}}
                     ]}
                 }
@@ -405,6 +442,10 @@ mod tests {
         assert_eq!(named.planets.len(), 1);
         assert_eq!(named.planets[0].name.as_deref(), Some("Rest Stop"));
         assert_eq!(named.planets[0].biome, Some(Biome::Dead));
+        // Two creatures, one plant, three minerals on the planet; the creature on planet 1,
+        // which has no Planet record, has nowhere to go.
+        assert_eq!(named.planets[0].scanned, Scanned::new(2, 1, 3));
+        assert_eq!(named.planets.len(), 1);
 
         let unnamed = systems
             .values()
