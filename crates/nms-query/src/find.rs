@@ -2,7 +2,8 @@
 
 use nms_core::address::GalacticAddress;
 use nms_core::biome::{Biome, BiomeSubType};
-use nms_core::system::{Planet, System, SystemId};
+use nms_core::generated::Generated;
+use nms_core::system::{Planet, System};
 use nms_graph::query::BiomeFilter;
 use nms_graph::{GalaxyModel, GraphError};
 
@@ -57,6 +58,8 @@ pub struct FindResult {
     /// every planet in the same system, so it doubles as the group key and as a label
     /// for systems without a name.
     pub system_hex: String,
+    /// The region, generated name, and hover properties of the system, when a generator answered.
+    pub generated: Option<Generated>,
 }
 
 /// Execute a find query against the galaxy model.
@@ -165,7 +168,8 @@ pub fn execute_find(model: &GalaxyModel, query: &FindQuery) -> Result<Vec<FindRe
                 sys_addr.reality_index,
             );
             let portal_hex = format!("{:012X}", planet_addr.packed());
-            let system_hex = format!("{:012X}", SystemId::from_address(sys_addr).0);
+            let system_hex = format!("{:012X}", sys_addr.packed() & 0x0FFF_FFFF_FFFF);
+            let generated = model.generated_for(&key.0).cloned();
 
             Some(FindResult {
                 planet: planet.clone(),
@@ -173,6 +177,7 @@ pub fn execute_find(model: &GalaxyModel, query: &FindQuery) -> Result<Vec<FindRe
                 distance_ly: dist,
                 portal_hex,
                 system_hex,
+                generated,
             })
         })
         .collect();

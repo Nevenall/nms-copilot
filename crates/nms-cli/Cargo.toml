@@ -21,6 +21,7 @@ nms-core = { workspace = true }
 nms-save = { workspace = true }
 nms-graph = { workspace = true }
 nms-query = { workspace = true }
+nms-namegen = { workspace = true }
 clap = { workspace = true }
 oxur-cli = { workspace = true }
 serde = { workspace = true }

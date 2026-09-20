@@ -129,12 +129,13 @@ fn screen_loop(
         let events = watch::drain(watch.receiver);
         if wake || !events.is_empty() || last_tick.elapsed() >= options.tick {
             let now = unix_now();
-            let report = watch::sync(
+            let report = watch::sync_with(
                 model,
                 session,
                 events,
                 watch.cache_path,
                 watch.save_version,
+                watch.generator,
                 now,
             );
             last_tick = Instant::now();

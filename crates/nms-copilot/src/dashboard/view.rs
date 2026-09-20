@@ -170,15 +170,21 @@ fn player_panel(model: &GalaxyModel) -> PlayerPanel {
         };
     };
     let here = state.current_address;
-    let system = match model.system(&SystemId::from_address(&here)) {
+    let here_id = SystemId::from_address(&here);
+    let system = match model.system(&here_id) {
         Some(system) => {
-            let name = system
-                .name
-                .clone()
+            let name = model
+                .display_name(&here_id)
+                .map(str::to_string)
                 .unwrap_or_else(|| format!("system {}", here.solar_system_index()));
             let planets = system.planets.len();
+            // The region rides on the same line so the panel keeps its two even columns.
+            let region = model
+                .generated_here()
+                .map(|g| format!(" \u{00B7} {}", g.region))
+                .unwrap_or_default();
             format!(
-                "{name} \u{00B7} {planets} planet{}",
+                "{name}{region} \u{00B7} {planets} planet{}",
                 if planets == 1 { "" } else { "s" }
             )
         }
@@ -242,11 +248,11 @@ fn ships_fact(model: &GalaxyModel) -> String {
     }
 }
 
-/// A system's name, or its portal address when the atlas has no name for it.
+/// A system's name, save or generated, or its portal address when neither knows it.
 fn system_label(model: &GalaxyModel, addr: &GalacticAddress) -> String {
     model
-        .system(&SystemId::from_address(addr))
-        .and_then(|system| system.name.clone())
+        .display_name(&SystemId::from_address(addr))
+        .map(str::to_string)
         .unwrap_or_else(|| PortalAddress::from_galactic_address(addr).to_hex_string())
 }
 

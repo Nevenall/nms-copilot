@@ -10,6 +10,7 @@ use nms_core::address::GalacticAddress;
 use nms_core::biome::Biome;
 use nms_core::delta::SaveDelta;
 use nms_core::fleet::Fleet;
+use nms_core::generated::{AddressGenerator, Generated};
 use nms_core::holdings::Holdings;
 use nms_core::player::{PlayerBase, PlayerState};
 use nms_core::system::{Planet, System};
@@ -67,6 +68,10 @@ pub struct GalaxyModel {
 
     /// Every inventory grid, ship, exocraft, and multi-tool; `None` only for a model built without a save.
     pub holdings: Option<Holdings>,
+
+    /// What the game generates from each system's address (region, name, hover properties);
+    /// empty until [`enrich`](Self::enrich) runs, and only for the systems a generator answered.
+    pub generated: HashMap<SystemId, Generated>,
 }
 
 impl Default for GalaxyModel {
@@ -92,6 +97,7 @@ impl GalaxyModel {
             player_state: None,
             fleet: None,
             holdings: None,
+            generated: HashMap::new(),
         }
     }
 
@@ -174,10 +180,51 @@ impl GalaxyModel {
             player_state,
             fleet,
             holdings,
+            generated: HashMap::new(),
         };
 
         model.build_edges(crate::edges::EdgeStrategy::default());
         model
+    }
+
+    /// Ask a generator for every system in the model and the player's current system,
+    /// and keep what it answers. Systems it cannot answer keep whatever they had.
+    pub fn enrich(&mut self, generator: &dyn AddressGenerator) {
+        let mut addresses: Vec<GalacticAddress> =
+            self.systems.values().map(|s| s.address).collect();
+        if let Some(pos) = self.player_position() {
+            addresses.push(*pos);
+        }
+        for (addr, generated) in generator.generate(&addresses) {
+            let id = SystemId::from_address(&addr);
+            // A generated name finds the system by name too, unless a save name has it.
+            if self.systems.contains_key(&id) {
+                self.name_index
+                    .entry(generated.name.to_lowercase())
+                    .or_insert(id);
+            }
+            self.generated.insert(id, generated);
+        }
+    }
+
+    /// The generated record for a system, if a generator answered for it.
+    pub fn generated_for(&self, id: &SystemId) -> Option<&Generated> {
+        self.generated.get(id)
+    }
+
+    /// The generated record for the system the player is in.
+    pub fn generated_here(&self) -> Option<&Generated> {
+        let pos = self.player_position()?;
+        self.generated.get(&SystemId::from_address(pos))
+    }
+
+    /// A system's name as the game shows it: the discovery's name (player or station
+    /// name) when there is one, else the generated name.
+    pub fn display_name(&self, id: &SystemId) -> Option<&str> {
+        self.systems
+            .get(id)
+            .and_then(|s| s.name.as_deref())
+            .or_else(|| self.generated.get(id).map(|g| g.name.as_str()))
     }
 
     /// Number of systems in the model.

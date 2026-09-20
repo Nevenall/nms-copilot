@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 
 use nms_core::biome::Biome;
-use nms_graph::GalaxyModel;
 use nms_query::display::format_find_results;
 use nms_query::find::{FindQuery, ReferencePoint, execute_find};
 use nms_query::theme::{Theme, should_use_colors};
@@ -31,7 +30,7 @@ pub fn run(args: FindArgs) -> Result<(), Box<dyn std::error::Error>> {
     let save = nms_save::parse_save_file(&path)?;
 
     // Build model
-    let mut model = GalaxyModel::from_save(&save);
+    let mut model = crate::build_model(&save);
     model.ensure_player_system();
 
     // Parse biome filter

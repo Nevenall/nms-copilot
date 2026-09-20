@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-use nms_graph::GalaxyModel;
 use nms_query::display::format_show_result;
 use nms_query::show::{ShowQuery, execute_show};
 use nms_query::theme::{Theme, should_use_colors};
@@ -21,7 +20,9 @@ pub fn run(save: Option<PathBuf>, target: ShowTarget) -> Result<(), Box<dyn std:
             .to_path_buf(),
     };
     let save = nms_save::parse_save_file(&path)?;
-    let model = GalaxyModel::from_save(&save);
+    let mut model = crate::build_model(&save);
+    // The player's own system may be undiscovered; it is still worth showing.
+    model.ensure_player_system();
 
     let query = match target {
         ShowTarget::System { name } => ShowQuery::System(name),

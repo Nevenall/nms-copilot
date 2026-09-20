@@ -21,6 +21,15 @@ pub fn run(save_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+/// What the generator says about the system the player is in, when the tool is installed.
+fn generated_here(ps: &PlayerStateData) -> Option<nms_core::Generated> {
+    use nms_core::AddressGenerator;
+    let ua = &ps.universe_address;
+    let addr = ua.galactic_address.to_galactic_address(ua.reality_index);
+    let generator = crate::namegen()?;
+    generator.generate(&[addr]).remove(&addr)
+}
+
 fn print_summary(save: &SaveRoot) {
     let theme = nms_theme();
 
@@ -28,6 +37,7 @@ fn print_summary(save: &SaveRoot) {
     let ua = &ps.universe_address;
     let galaxy = Galaxy::by_index(ua.reality_index);
     let ga = &ua.galactic_address;
+    let generated = generated_here(ps);
 
     let mut builder = Builder::default();
     builder.push_record(["Property", "Detail"]);
@@ -40,6 +50,10 @@ fn print_summary(save: &SaveRoot) {
     ]);
     builder.push_record(["Game Mode", &format_game_mode(save.base_context.game_mode)]);
     builder.push_record(["Galaxy", galaxy.name]);
+    if let Some(g) = &generated {
+        builder.push_record(["Region", &g.region]);
+        builder.push_record(["System", &g.name]);
+    }
     builder.push_record([
         "Voxel Position",
         &format!("X={}, Y={}, Z={}", ga.voxel_x, ga.voxel_y, ga.voxel_z),

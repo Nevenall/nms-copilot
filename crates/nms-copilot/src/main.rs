@@ -143,6 +143,16 @@ fn main() {
     let mut model = model;
     model.ensure_player_system();
 
+    // Region and system names and hover properties, when the nms_namegen tool is installed.
+    let namegen: Option<Arc<nms_namegen::NameGen>> = config
+        .namegen
+        .tool()
+        .and_then(|c| nms_namegen::NameGen::discover(&c))
+        .map(Arc::new);
+    if let Some(generator) = &namegen {
+        model.enrich(generator.as_ref());
+    }
+
     // ── Headless mode: MCP server only ──────────────────────────
     if cli.headless {
         let transport = parse_mcp_transport(&cli, &config);
@@ -154,7 +164,8 @@ fn main() {
             model.blocking_read().bases.len(),
         );
         let backup = config.backup_enabled().then(|| config.backup_policy());
-        mcp::run_headless(model, transport, save_path, backup);
+        let generator = namegen.clone().map(|g| g as mcp::SharedGenerator);
+        mcp::run_headless(model, transport, save_path, backup, generator);
         return;
     }
 
@@ -206,6 +217,7 @@ fn main() {
         Arc::clone(&model),
         mcp::Transport::Http(mcp_addr),
         save_path.clone(),
+        namegen.clone().map(|g| g as mcp::SharedGenerator),
     );
     let mcp_base = format!("http://{mcp_addr}");
     eprintln!("MCP server listening on {mcp_base}");
@@ -242,6 +254,9 @@ fn main() {
         receiver: watch_handle.as_ref().map(|h| &h.receiver),
         cache_path: cache_for_watcher,
         save_version,
+        generator: namegen
+            .as_deref()
+            .map(|g| g as &dyn nms_core::generated::AddressGenerator),
     };
     let color = nms_query::theme::should_use_colors(config.display.color);
     let dashboard_options = dashboard::Options {

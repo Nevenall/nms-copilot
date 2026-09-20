@@ -41,6 +41,9 @@ pub struct Config {
 
     /// Dashboard settings.
     pub dashboard: DashboardConfig,
+
+    /// Generated names and properties from the `nms_namegen` tool.
+    pub namegen: NameGenConfig,
 }
 
 /// Save file location and format.
@@ -251,6 +254,42 @@ impl DashboardConfig {
     /// The alert re-check interval, never shorter than a second.
     pub fn tick(&self) -> Duration {
         Duration::from_secs(self.tick_secs.max(1))
+    }
+}
+
+/// Settings for the `nms_namegen` tool that generates region and system names and the
+/// galaxy map's hover properties from an address (plan 0049).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NameGenConfig {
+    /// Use the tool when it is installed (default: true).
+    pub enabled: bool,
+
+    /// The `namegen.py` script (default: `~/.nms-copilot/nms_namegen/namegen.py`, or `NMS_NAMEGEN`). A leading `~` is the home directory.
+    pub path: Option<PathBuf>,
+
+    /// The Python interpreter to run it with (default: `python`, then `python3`).
+    pub python: Option<String>,
+}
+
+impl Default for NameGenConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            path: None,
+            python: None,
+        }
+    }
+}
+
+impl NameGenConfig {
+    /// How to find the tool, or `None` when it is switched off.
+    pub fn tool(&self) -> Option<nms_namegen::NameGenConfig> {
+        self.enabled.then(|| nms_namegen::NameGenConfig {
+            script: self.path.as_deref().map(expand_home),
+            python: self.python.clone(),
+            cache: None,
+        })
     }
 }
 

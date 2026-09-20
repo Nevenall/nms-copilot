@@ -13,13 +13,26 @@ use nms_watch::WatchEvent;
 use tokio::sync::RwLock;
 
 use crate::session::{PositionContext, SessionState, unix_secs};
+use nms_core::generated::AddressGenerator;
 
-/// What a mode needs to keep the model current: the watcher's receiver, when there is one, and where to write the cache.
-#[derive(Debug, Clone, Copy)]
+/// What a mode needs to keep the model current: the watcher's receiver, when there is one, where to write the cache, and the generator that names systems the save does not.
+#[derive(Clone, Copy)]
 pub struct WatchContext<'a> {
     pub receiver: Option<&'a mpsc::Receiver<WatchEvent>>,
     pub cache_path: Option<&'a Path>,
     pub save_version: u32,
+    pub generator: Option<&'a dyn AddressGenerator>,
+}
+
+impl std::fmt::Debug for WatchContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WatchContext")
+            .field("receiver", &self.receiver.is_some())
+            .field("cache_path", &self.cache_path)
+            .field("save_version", &self.save_version)
+            .field("generator", &self.generator.is_some())
+            .finish()
+    }
 }
 
 impl WatchContext<'_> {
@@ -31,12 +44,13 @@ impl WatchContext<'_> {
         now: i64,
     ) -> SyncReport {
         let events = drain(self.receiver);
-        sync(
+        sync_with(
             model,
             session,
             events,
             self.cache_path,
             self.save_version,
+            self.generator,
             now,
         )
     }
@@ -73,6 +87,19 @@ pub fn sync(
     save_version: u32,
     now: i64,
 ) -> SyncReport {
+    sync_with(model, session, events, cache_path, save_version, None, now)
+}
+
+/// [`sync`] with a generator that names any system a delta brought in.
+pub fn sync_with(
+    model: &RwLock<GalaxyModel>,
+    session: &mut SessionState,
+    events: Vec<WatchEvent>,
+    cache_path: Option<&Path>,
+    save_version: u32,
+    generator: Option<&dyn AddressGenerator>,
+    now: i64,
+) -> SyncReport {
     let mut notes = Vec::new();
     let mut any_delta = false;
     let deltas: Vec<SaveDelta> = events
@@ -95,6 +122,9 @@ pub fn sync(
                     .map(|n| n.trim_start().to_string()),
             );
             any_delta = true;
+        }
+        if any_delta && let Some(generator) = generator {
+            guard.enrich(generator);
         }
         if any_delta && let Some(path) = cache_path {
             let data = nms_cache::extract_cache_data(&guard, save_version);

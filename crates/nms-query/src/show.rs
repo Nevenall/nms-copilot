@@ -1,5 +1,6 @@
 //! Detail view queries for systems, planets, and bases.
 
+use nms_core::generated::Generated;
 use nms_core::player::PlayerBase;
 use nms_core::system::System;
 use nms_graph::spatial::SystemId;
@@ -30,6 +31,8 @@ pub struct ShowSystemResult {
     pub portal_hex: String,
     pub galaxy_name: String,
     pub distance_from_player: Option<f64>,
+    /// The region, the generated name, and the hover properties, when a generator answered.
+    pub generated: Option<Generated>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,11 +86,16 @@ fn show_system(model: &GalaxyModel, name_or_id: &str) -> Result<ShowResult, Grap
         .filter(|pos| pos.reality_index == system.address.reality_index)
         .map(|pos| pos.distance_ly(&system.address));
 
+    let generated = model
+        .generated_for(&SystemId::from_address(&system.address))
+        .cloned();
+
     Ok(ShowResult::System(ShowSystemResult {
         system: system.clone(),
         portal_hex,
         galaxy_name: galaxy.name.to_string(),
         distance_from_player,
+        generated,
     }))
 }
 

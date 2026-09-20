@@ -436,6 +436,21 @@ fn resolve_save(save: Option<PathBuf>) -> Result<PathBuf, Box<dyn std::error::Er
         .to_path_buf())
 }
 
+/// The generator for region and system names and hover properties, when the
+/// `nms_namegen` tool is installed (see `docs/plans/project03-save-tooling/0049-generated-galaxy.md`).
+fn namegen() -> Option<nms_namegen::NameGen> {
+    nms_namegen::NameGen::discover(&nms_namegen::NameGenConfig::default())
+}
+
+/// Build the model from a save and add generated names and properties when the tool is installed.
+fn build_model(save: &nms_save::model::SaveRoot) -> nms_graph::GalaxyModel {
+    let mut model = nms_graph::GalaxyModel::from_save(save);
+    if let Some(generator) = namegen() {
+        model.enrich(&generator);
+    }
+    model
+}
+
 /// Resolve a save file path, checking --slot from the global CLI arg.
 fn resolve_save_with_slot(
     save: Option<PathBuf>,

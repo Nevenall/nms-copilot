@@ -2159,6 +2159,7 @@ dependencies = [
  "csv",
  "nms-core",
  "nms-graph",
+ "nms-namegen",
  "nms-query",
  "nms-save",
  "oxur-cli",
@@ -2192,6 +2193,7 @@ dependencies = [
  "nms-cache",
  "nms-core",
  "nms-graph",
+ "nms-namegen",
  "nms-query",
  "nms-save",
  "nms-watch",
@@ -2230,6 +2232,19 @@ dependencies = [
  "nms-save",
  "petgraph",
  "rstar",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "nms-namegen"
+version = "0.3.0"
+dependencies = [
+ "dirs 7.0.0",
+ "log",
+ "nms-core",
  "serde",
  "serde_json",
  "tempfile",

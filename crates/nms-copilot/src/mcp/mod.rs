@@ -48,6 +48,7 @@ pub fn spawn_mcp_background(
     model: Arc<RwLock<GalaxyModel>>,
     transport: Transport,
     save_path: Option<std::path::PathBuf>,
+    generator: Option<SharedGenerator>,
 ) {
     let mcp_service = ServiceHandle::new("mcp-http");
     let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
@@ -63,6 +64,7 @@ pub fn spawn_mcp_background(
                 transport,
                 watcher_rx,
                 None,
+                generator,
                 Some(ready_tx),
                 service_for_thread,
             )
@@ -87,6 +89,9 @@ pub fn spawn_mcp_background(
     }
 }
 
+/// A generator the delta loop can hold across tasks.
+pub type SharedGenerator = Arc<dyn nms_core::generated::AddressGenerator + Send + Sync>;
+
 /// Run the MCP server in headless mode (blocking, on the current thread).
 ///
 /// Creates a tokio runtime and blocks until the server shuts down.
@@ -95,14 +100,23 @@ pub fn run_headless(
     transport: Transport,
     save_path: Option<std::path::PathBuf>,
     backup: Option<BackupPolicy>,
+    generator: Option<SharedGenerator>,
 ) {
     let mcp_service = ServiceHandle::new("mcp");
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         let watcher_rx = start_watcher(save_path.as_deref());
 
-        if let Err(e) =
-            run_mcp_server(model, transport, watcher_rx, backup, None, mcp_service).await
+        if let Err(e) = run_mcp_server(
+            model,
+            transport,
+            watcher_rx,
+            backup,
+            generator,
+            None,
+            mcp_service,
+        )
+        .await
         {
             eprintln!("MCP server error: {e}");
         }
@@ -147,6 +161,7 @@ async fn run_mcp_server(
     transport: Transport,
     watcher_rx: Option<std::sync::mpsc::Receiver<WatchEvent>>,
     backup: Option<BackupPolicy>,
+    generator: Option<SharedGenerator>,
     ready_tx: Option<std::sync::mpsc::SyncSender<Result<(), String>>>,
     service_handle: ServiceHandle,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -175,7 +190,7 @@ async fn run_mcp_server(
     if let Some(receiver) = watcher_rx {
         let model_for_watcher = Arc::clone(&model);
         tokio::spawn(async move {
-            apply_deltas_loop(receiver, model_for_watcher, notifier, backup).await;
+            apply_deltas_loop(receiver, model_for_watcher, notifier, backup, generator).await;
         });
     }
 
@@ -289,6 +304,7 @@ async fn apply_deltas_loop(
     model: Arc<RwLock<GalaxyModel>>,
     notifier: Notifier,
     backup: Option<BackupPolicy>,
+    generator: Option<SharedGenerator>,
 ) {
     // Bridge std::sync::mpsc to tokio::sync::mpsc; backups happen on the bridge thread so the copy never blocks the runtime
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -315,6 +331,9 @@ async fn apply_deltas_loop(
     while let Some(delta) = rx.recv().await {
         let mut model = model.write().await;
         model.apply_delta(&delta);
+        if let Some(generator) = &generator {
+            model.enrich(generator.as_ref());
+        }
 
         // Notify connected MCP clients about changes
         if let Some(ref moved) = delta.player_moved {

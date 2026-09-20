@@ -44,6 +44,8 @@ pub struct ExportRecord {
     pub planet_name: String,
     pub biome: String,
     pub system_name: String,
+    /// The region's generated name, empty when no generator answered.
+    pub region: String,
     pub distance_ly: f64,
     pub portal_glyphs: String,
     pub portal_emoji: String,
@@ -60,7 +62,17 @@ impl From<&FindResult> for ExportRecord {
         Self {
             planet_name: r.planet.name.clone().unwrap_or_default(),
             biome: r.planet.biome.map(|b| b.to_string()).unwrap_or_default(),
-            system_name: r.system.name.clone().unwrap_or_default(),
+            system_name: r
+                .system
+                .name
+                .clone()
+                .or_else(|| r.generated.as_ref().map(|g| g.name.clone()))
+                .unwrap_or_default(),
+            region: r
+                .generated
+                .as_ref()
+                .map(|g| g.region.clone())
+                .unwrap_or_default(),
             distance_ly: r.distance_ly,
             portal_glyphs: r.portal_hex.clone(),
             portal_emoji: hex_to_emoji(&r.portal_hex),
@@ -81,7 +93,7 @@ pub fn run(args: ExportArgs) -> Result<(), Box<dyn std::error::Error>> {
 
     let path = crate::resolve_save(args.save)?;
     let save = nms_save::parse_save_file(&path)?;
-    let model = nms_graph::GalaxyModel::from_save(&save);
+    let model = crate::build_model(&save);
 
     let biome = args
         .biome
@@ -162,6 +174,7 @@ mod tests {
             distance_ly: 42_000.0,
             portal_hex: format!("{:012X}", addr.packed()),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         }
     }
 
@@ -247,6 +260,7 @@ mod tests {
             distance_ly: 0.0,
             portal_hex: "000000000001".into(),
             system_hex: "000000000001".into(),
+            generated: None,
         };
         let record = ExportRecord::from(&result);
         assert!(record.planet_name.is_empty());

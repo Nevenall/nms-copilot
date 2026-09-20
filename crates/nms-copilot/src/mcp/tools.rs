@@ -690,8 +690,26 @@ async fn handle_show_system(
                 })
                 .collect();
 
+            let generated = s.generated.as_ref();
+            let attributes = generated.and_then(|g| g.attributes.as_ref()).map(|a| {
+                json!({
+                    "star": a.star.to_string(),
+                    "economy": a.economy.to_string(),
+                    "wealth": a.wealth.to_string(),
+                    "conflict": a.conflict.to_string(),
+                    "lifeform": a.race.map(|r| r.to_string()),
+                    "uncharted": a.uncharted,
+                    "abandoned": a.abandoned,
+                    "pirate": a.pirate,
+                    "planets": a.planets,
+                    "moons": a.moons,
+                })
+            });
             text_result(json!({
-                "name": s.system.name.as_deref().unwrap_or("-"),
+                "name": s.system.name.as_deref().or(generated.map(|g| g.name.as_str())).unwrap_or("-"),
+                "name_generated": s.system.name.is_none() && generated.is_some(),
+                "region": generated.map(|g| g.region.as_str()),
+                "attributes": attributes,
                 "galaxy": s.galaxy_name,
                 "discoverer": s.system.discoverer.as_deref().unwrap_or("unknown"),
                 "portal_glyphs_hex": s.portal_hex,

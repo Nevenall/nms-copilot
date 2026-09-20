@@ -250,6 +250,27 @@ keep = 20                             # unlabelled snapshots kept per slot; 0 ke
 
 Restore is manual, and the tool never writes into the game's folder. With the game closed, copy the two files from a snapshot folder back over the same names in the account folder (for example `%APPDATA%\HelloGames\NMS\st_<id>\` on Windows), then start the game and load the slot.
 
+### Region names and system properties
+
+The save never holds a region's name, the generated name of a system the player has not renamed or docked at, or the properties the galaxy map shows on hover (star colour, economy, wealth, conflict, lifeform). The game generates all of them from the address, and the community tool [nms_namegen](https://github.com/hadsh/nms_namegen) reproduces the generator. When it is installed, `show system`, `list systems`, `find`, `export`, `info`, the dashboard, and the `show_system` MCP tool show region names and fill in generated system names (marked `(generated)` or `*`), and `show system` adds the hover properties. Without it everything works as before with those columns empty.
+
+Install it once (Python 3.13 or later with numpy):
+
+```bash
+git clone https://github.com/hadsh/nms_namegen ~/.nms-copilot/nms_namegen
+git -C ~/.nms-copilot/nms_namegen checkout 52ad48a   # the commit this release was validated against
+pip install numpy
+```
+
+Answers are cached in `~/.nms-copilot/namegen-cache.json`, so each address costs one run of the tool ever. The location can be changed with `NMS_NAMEGEN` or in the config:
+
+```toml
+[namegen]
+enabled = true                        # use the tool when it is installed
+path = "~/.nms-copilot/nms_namegen/namegen.py"
+python = "python"                     # or "python3", or a full path
+```
+
 ### Interactive REPL
 
 The REPL (`nms-copilot`) opens into a dashboard (see below) and, at its prompt, supports all the commands above plus session management and an interactive galaxy map. It also watches your bases and your fleet: the prompt's right-hand side shows `🌱 16 ready · 📦 1 full · 🚀 1 waiting` while crops are ready to harvest, an extraction network is full, a frigate is waiting for your decision, or an expedition has returned, and a notice prints once when any of those happens. New Navigator offers after the 00:00 UTC reset are announced the same way.
@@ -364,6 +385,7 @@ nms/
 ├─ nms-query      Shared query engine (find, route, show, stats)
 ├─ nms-watch      File watcher, delta computation, live updates
 ├─ nms-cache      rkyv zero-copy serialization for fast startup
+├─ nms-namegen    Region and system names and properties from the address, via the nms_namegen tool
 ├─ nms-cli        clap one-shot CLI (the `nms` binary)
 └─ nms-copilot    reedline interactive REPL + MCP server (the `nms-copilot` binary)
 ```

@@ -86,6 +86,16 @@ fn load_model(
     Ok(GalaxyModel::from_save(&save))
 }
 
+/// `load_model` plus generated names and properties, for the listings that show them.
+fn load_model_generated(
+    save: Option<PathBuf>,
+    slot: Option<u8>,
+) -> Result<GalaxyModel, Box<dyn std::error::Error>> {
+    let path = crate::resolve_save_with_slot(save, slot)?;
+    let save = nms_save::parse_save_file(&path)?;
+    Ok(crate::build_model(&save))
+}
+
 fn list_galaxies(galaxy_type: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     let type_filter = galaxy_type
         .as_ref()
@@ -266,17 +276,32 @@ fn list_systems(
     limit: usize,
     all: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let model = load_model(save, slot)?;
+    let model = load_model_generated(save, slot)?;
 
     if model.systems.is_empty() {
         println!("  No systems found.");
         return Ok(());
     }
 
-    let mut systems: Vec<_> = model.systems.values().collect();
-    systems.sort_by(|a, b| {
-        let a_name = a.name.as_deref().unwrap_or("");
-        let b_name = b.name.as_deref().unwrap_or("");
+    // Named systems first, alphabetically, where the name is the save's or, marked
+    // with a trailing `*`, the generated one; systems with neither go last.
+    let mut systems: Vec<(&nms_core::System, String, String)> = model
+        .systems
+        .iter()
+        .map(|(id, sys)| {
+            let name = match (sys.name.as_deref(), model.generated_for(id)) {
+                (Some(name), _) => name.to_string(),
+                (None, Some(g)) => format!("{}*", g.name),
+                (None, None) => String::new(),
+            };
+            let region = model
+                .generated_for(id)
+                .map(|g| g.region.clone())
+                .unwrap_or_default();
+            (sys, name, region)
+        })
+        .collect();
+    systems.sort_by(|(_, a_name, _), (_, b_name, _)| {
         match (a_name.is_empty(), b_name.is_empty()) {
             (true, false) => std::cmp::Ordering::Greater,
             (false, true) => std::cmp::Ordering::Less,
@@ -287,21 +312,60 @@ fn list_systems(
     let total = systems.len();
     let effective_limit = if all || limit == 0 { total } else { limit };
     let showing = total.min(effective_limit);
+    let any_generated = !model.generated.is_empty();
 
     let theme = nms_theme();
     let mut builder = Builder::default();
-    builder.push_record(["Name", "Discovered Planets", "Address", "Portal Glyphs"]);
+    if any_generated {
+        builder.push_record([
+            "Name",
+            "Region",
+            "Galaxy",
+            "Discovered Planets",
+            "Address",
+            "Portal Glyphs",
+        ]);
+    } else {
+        builder.push_record([
+            "Name",
+            "Galaxy",
+            "Discovered Planets",
+            "Address",
+            "Portal Glyphs",
+        ]);
+    }
 
-    for sys in systems.iter().take(effective_limit) {
-        let name = sys.name.as_deref().unwrap_or("-");
-        let planet_count = sys.planets.len();
+    for (sys, name, region) in systems.iter().take(effective_limit) {
+        let name = if name.is_empty() { "-" } else { name };
+        let planet_count = sys.planets.len().to_string();
+        let galaxy = Galaxy::by_index(sys.address.reality_index).name.to_string();
         let hex = format!("{:012X}", sys.address.packed());
         let glyphs = hex_to_emoji(&hex);
-        builder.push_record([name.to_string(), planet_count.to_string(), hex, glyphs]);
+        if any_generated {
+            builder.push_record([
+                name.to_string(),
+                region.clone(),
+                galaxy,
+                planet_count,
+                hex,
+                glyphs,
+            ]);
+        } else {
+            builder.push_record([name.to_string(), galaxy, planet_count, hex, glyphs]);
+        }
     }
-    builder.push_record(["", "", "", ""]);
+    builder.push_record(if any_generated {
+        vec![""; 6]
+    } else {
+        vec![""; 5]
+    });
 
     print!("{}", build_table(builder, &["SYSTEMS"], &theme, "Systems"));
+    if any_generated {
+        println!(
+            "\n  * generated name: the game's own, shown when nothing in the save names the system"
+        );
+    }
     if showing < total {
         println!("\n  Showing {showing} of {total} systems (use --all to show all)");
     }

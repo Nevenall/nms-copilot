@@ -146,8 +146,13 @@ pub fn format_find_results(results: &[FindResult], theme: &Theme) -> String {
                 s
             })
             .unwrap_or_else(|| "?".to_string());
+        // The save's name, else the generated one, else the address.
         let system_label = if first_in_group {
-            r.system.name.as_deref().unwrap_or(&r.system_hex)
+            r.system
+                .name
+                .as_deref()
+                .or_else(|| r.generated.as_ref().map(|g| g.name.as_str()))
+                .unwrap_or(&r.system_hex)
         } else {
             ""
         };
@@ -184,11 +189,21 @@ pub fn format_find_results(results: &[FindResult], theme: &Theme) -> String {
 pub fn format_show_system(result: &ShowSystemResult, theme: &Theme) -> String {
     let table_theme = table_theme_for(theme);
     let sys = &result.system;
-    let name = sys.name.as_deref().unwrap_or("-");
+    let generated = result.generated.as_ref();
+    // The save's name (the player's or the station's) wins; the generated name is what
+    // the game shows when there is none, and says so.
+    let name = match (sys.name.as_deref(), generated) {
+        (Some(name), _) => name.to_string(),
+        (None, Some(g)) => format!("{} (generated)", g.name),
+        (None, None) => "-".to_string(),
+    };
 
     let mut builder = Builder::default();
     builder.push_record(["Property", "Detail"]);
-    builder.push_record(["Name", name]);
+    builder.push_record(["Name", &name]);
+    if let Some(g) = generated {
+        builder.push_record(["Region", &g.region]);
+    }
     builder.push_record(["Galaxy", &result.galaxy_name]);
     builder.push_record(["Portal Glyphs", &hex_to_emoji(&result.portal_hex)]);
     builder.push_record(["Hex Address", &result.portal_hex]);
@@ -213,6 +228,35 @@ pub fn format_show_system(result: &ShowSystemResult, theme: &Theme) -> String {
             sys.address.solar_system_index()
         ),
     ]);
+    if let Some(a) = generated.and_then(|g| g.attributes.as_ref()) {
+        builder.push_record(["Star", &a.star.to_string()]);
+        if a.uncharted {
+            builder.push_record(["Lifeform", "Uncharted"]);
+        } else {
+            builder.push_record(["Economy", &a.economy.to_string()]);
+            builder.push_record(["Wealth", &a.wealth.to_string()]);
+            builder.push_record(["Conflict", &a.conflict.to_string()]);
+            if let Some(race) = a.race {
+                builder.push_record(["Lifeform", &race.to_string()]);
+            }
+        }
+        if a.abandoned {
+            builder.push_record(["Abandoned", "yes"]);
+        }
+        if a.pirate {
+            builder.push_record(["Outlaw", "yes (unverified)"]);
+        }
+        let bodies = match a.moons {
+            0 => format!("{}", a.planets),
+            n => format!(
+                "{} and {} moon{}",
+                a.planets,
+                n,
+                if n == 1 { "" } else { "s" }
+            ),
+        };
+        builder.push_record(["Planets", &bodies]);
+    }
     builder.push_record(["", ""]);
 
     let mut out = String::new();
@@ -365,12 +409,9 @@ pub fn format_route(result: &RouteResult, model: &nms_graph::GalaxyModel, theme:
             .map(|s| format!("{:012X}", s.address.packed()))
             .unwrap_or_else(|| format!("{:012X}", hop.system_id.0));
 
-        // Unnamed systems are labelled by address, as in the find table.
-        let system_hex = format!("{:012X}", hop.system_id.0);
-        let system_name = model
-            .system(&hop.system_id)
-            .and_then(|s| s.name.as_deref())
-            .unwrap_or(&system_hex);
+        // Unnamed systems take their generated name, else the address, as in the find table.
+        let system_hex = format!("{:012X}", hop.system_id.0 & 0x0FFF_FFFF_FFFF);
+        let system_name = model.display_name(&hop.system_id).unwrap_or(&system_hex);
         let glyphs = hex_to_emoji(&portal_hex);
 
         let distance = format_distance(hop.leg_distance_ly);
@@ -1477,6 +1518,7 @@ mod tests {
             distance_ly: 42_000.0,
             portal_hex: format!("{:012X}", addr.packed()),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         }];
         let output = format_find_results(&results, &plain());
         assert!(output.contains("Eden"));
@@ -1494,6 +1536,7 @@ mod tests {
             distance_ly: 0.0,
             portal_hex: "000000000001".into(),
             system_hex: "000000000001".into(),
+            generated: None,
         }];
         let output = format_find_results(&results, &plain());
         assert!(output.contains("Toxic*"));
@@ -1514,6 +1557,7 @@ mod tests {
             distance_ly: 42_000.0,
             portal_hex: format!("{:012X}", addr.packed()),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         }];
         let output = format_find_results(&results, &Theme::default_dark());
         // Should contain ANSI escape sequences (from hex color theme)
@@ -1535,6 +1579,7 @@ mod tests {
             distance_ly: dist,
             portal_hex: format!("{:X}{}", index, &format!("{:012X}", addr.packed())[1..]),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         };
         let results = vec![
             row(sol, Some("Sol"), 1, 100.0),
@@ -1581,6 +1626,7 @@ mod tests {
             distance_ly: dist,
             portal_hex: format!("{:012X}", addr.packed()),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         };
         let results = vec![
             row(a, "Alpha", 100.0),
@@ -1616,6 +1662,7 @@ mod tests {
             distance_ly: 100.0,
             portal_hex: format!("3{}", &format!("{:012X}", addr.packed())[1..]),
             system_hex: format!("{:012X}", addr.packed()),
+            generated: None,
         }];
         let output = format_find_results(&results, &plain());
         assert!(output.contains("Planet 3"), "{output}");
@@ -1633,11 +1680,37 @@ mod tests {
             portal_hex: format!("{:012X}", addr.packed()),
             galaxy_name: "Euclid".into(),
             distance_from_player: None,
+            generated: None,
         };
         let output = format_show_system(&result, &plain());
         assert!(output.contains("Planet 1"), "{output}");
         assert!(output.contains("Eden"), "{output}");
         assert!(!output.contains("Planet 4"), "{output}");
+    }
+
+    #[test]
+    fn test_format_show_system_generated_rows() {
+        use nms_core::generated::{Generated, SystemAttributes};
+        let addr = GalacticAddress::new(-532, -4, -1706, 0x43, 0, 0);
+        let attributes =
+            SystemAttributes::from_codes(0, 3, 2, 3, 2, false, false, false, 4, 1, false);
+        let result = ShowSystemResult {
+            system: System::new(addr, None, None, None, vec![]),
+            portal_hex: format!("{:012X}", addr.packed()),
+            galaxy_name: "Euclid".into(),
+            distance_from_player: None,
+            generated: Some(Generated::new(
+                "Piponera Anomaly".into(),
+                "Lauderen".into(),
+                attributes,
+            )),
+        };
+        let output = format_show_system(&result, &plain());
+        assert!(output.contains("Lauderen (generated)"), "{output}");
+        assert!(output.contains("Piponera Anomaly"), "{output}");
+        assert!(output.contains("Scientific"), "{output}");
+        assert!(output.contains("Korvax"), "{output}");
+        assert!(output.contains("4 and 1 moon"), "{output}");
     }
 
     #[test]
@@ -1654,6 +1727,7 @@ mod tests {
             portal_hex: format!("{:012X}", addr.packed()),
             galaxy_name: "Euclid".into(),
             distance_from_player: Some(5000.0),
+            generated: None,
         };
         let output = format_show_system(&result, &plain());
         assert!(output.contains("Test System"));

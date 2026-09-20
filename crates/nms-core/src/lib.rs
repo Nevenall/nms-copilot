@@ -7,6 +7,7 @@ pub mod delta;
 pub mod discovery;
 pub mod fleet;
 pub mod galaxy;
+pub mod generated;
 pub mod glyph;
 pub mod holdings;
 pub mod items;
@@ -27,6 +28,9 @@ pub use fleet::{
     FrigateClass, FrigateGrade, Grade,
 };
 pub use galaxy::{Galaxy, GalaxyType, GalaxyTypeParseError};
+pub use generated::{
+    AddressGenerator, Economy, Generated, Race, StarColour, SystemAttributes, Tier,
+};
 pub use glyph::{Glyph, GlyphParseError};
 pub use holdings::{
     Container, ContainerKind, Holdings, ItemId, ItemKind, ItemStack, MultiToolSummary, ShipSummary,
